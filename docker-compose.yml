@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: abd_ecomm_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: abd
+      POSTGRES_PASSWORD: abd_local_pw
+      POSTGRES_DB: abd_ecomm
+    # Host port 5434: 5432 par machine no native Postgres ane 5433 par bija
+    # project no container already chale chhe.
+    ports:
+      - '5434:5432'
+    volumes:
+      - ./docker-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U abd -d abd_ecomm']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: abd_ecomm_redis
+    restart: unless-stopped
+    # Host port 6380: 6379 par bija project no redis (bloom-redis) already chale chhe.
+    ports:
+      - '6380:6379'
+    volumes:
+      - ./docker-data/redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10

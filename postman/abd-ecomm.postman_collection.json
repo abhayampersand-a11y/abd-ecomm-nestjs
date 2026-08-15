@@ -1,0 +1,474 @@
+{
+  "info": {
+    "name": "abd-ecomm-nestjs",
+    "description": "Shopify na upar aapno API layer.\n\nUSE KARVANI RIT:\n1. `Auth / 1. Request OTP` chalavo — devCode apne-aap save thai jashe\n2. `Auth / 2. Verify OTP` chalavo — code apne-aap bharaay chhe, ane accessToken + refreshToken save thai jaay chhe\n3. Have baaki na badha requests sidha chale chhe — Bearer token apne-aap lagi jaay chhe\n\nBadha tokens collection variables ma save thay chhe, etle manually copy-paste karvanu nathi.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001/api/v1" },
+    { "key": "identifier", "value": "9876543210" },
+    { "key": "linkIdentifier", "value": "juno-email@example.com" },
+    { "key": "productHandle", "value": "peach-traditional-paithani-dupatta" },
+    { "key": "devCode", "value": "" },
+    { "key": "linkDevCode", "value": "" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "nextCursor", "value": "" },
+    { "key": "addressId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+        "description": "Postgres, Redis ane Shopify config nu status."
+      }
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "1. Request OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.devCode) {",
+                  "  pm.collectionVariables.set('devCode', res.devCode);",
+                  "  console.log('OTP saved:', res.devCode);",
+                  "}",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('destination masked chhe', () => pm.expect(res.sentTo).to.include('*'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{identifier}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/otp/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "otp", "request"]
+            },
+            "description": "Phone ya email — banne aa ek j field ma.\n\nResponse hammesha ek j hoy chhe, user exist kare ke na kare (enumeration proof).\n\nDev ma `devCode` ma OTP aave chhe ane e apne-aap next request mate save thai jaay chhe."
+          }
+        },
+        {
+          "name": "2. Verify OTP (login)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.tokens) {",
+                  "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
+                  "  console.log('Tokens saved. isNewUser =', res.isNewUser);",
+                  "}",
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{identifier}}\",\n  \"code\": \"{{devCode}}\",\n  \"deviceId\": \"postman\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/otp/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "otp", "verify"]
+            },
+            "description": "OTP verify => login.\n\nAlag signup endpoint nathi: navo user hoy to ahiya j bane chhe, ane juno (Shopify no) hoy to eno existing record ACTIVE thai jaay chhe — enu badhu history sathe.\n\nTokens apne-aap save thai jaay chhe."
+          }
+        },
+        {
+          "name": "3. Me (profile)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Profile + badha verified email/phone.\n\n`emailVerified: false` hoy to app \"Verify your email to see older orders\" batavi shake."
+          }
+        },
+        {
+          "name": "4. Update profile (screen 05)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Abhay\",\n  \"lastName\": \"Desai\",\n  \"email\": \"abhay@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Registration screen. Login pachhi `isNewUser: true` aave tyare j app aa screen dekhaade.\n\n⚠️ Ahiya no email VERIFIED NATHI — fakt contact mate save thay chhe (`contactEmail`). Profile ma `emailVerified: false` j rahese.\n\nJuna orders sathe match karva mate user e e email `Identity linking` folder na endpoints thi verify karvo padse."
+          }
+        },
+        {
+          "name": "5. Refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.refreshToken);",
+                  "  console.log('Tokens rotated');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\",\n  \"deviceId\": \"postman\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/token/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "token", "refresh"]
+            },
+            "description": "Har refresh e juno token revoke thay ane navo bane chhe (rotation).\n\nJo koi juno token fari vapre, to e chori no signal chhe — tyare aakhi family revoke thai jaay chhe ane fari login karvu pade."
+          }
+        },
+        {
+          "name": "6. Logout (aa device)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "7. Logout everywhere",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout-all"]
+            },
+            "description": "Badha devices par thi logout."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Identity linking",
+      "description": "\"Juna orders nathi dekhata?\" flow.\n\nUser e phone thi login karyu, pan website par na juna orders guest checkout ma ALAG email thi hata. E email ahiya verify kare etle e orders ena account sathe jodai jaay chhe.\n\nSecurity: fakt VERIFIED identifier par j match thay chhe — nahi to bija na orders leak thai jaay.",
+      "item": [
+        {
+          "name": "1. Request OTP for other email/phone",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.devCode) {",
+                  "  pm.collectionVariables.set('linkDevCode', res.devCode);",
+                  "  console.log('Link OTP saved:', res.devCode);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{linkIdentifier}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/identities/request-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "identities", "request-otp"]
+            }
+          }
+        },
+        {
+          "name": "2. Verify & link",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{linkIdentifier}}\",\n  \"code\": \"{{linkDevCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/identities/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "identities", "verify"]
+            },
+            "description": "Verify safal thay etle j — ane tya sudhi nahi — aa identifier na Shopify records jodaay chhe.\n\nResponse ma `linkedShopifyRecords` batave chhe ke ketla juna records jodaaya."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Addresses",
+      "description": "Badha endpoints par login jaruri chhe.\n\nAddresses aapda Postgres ma chhe, Shopify ma nahi — etle migration vakhte addresses sathe aavse, Shopify par pacha javu nahi pade.",
+      "item": [
+        {
+          "name": "1. List",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["addresses"]
+            },
+            "description": "Default address hammesha sauthi upar aave chhe."
+          }
+        },
+        {
+          "name": "2. Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) {",
+                  "  pm.collectionVariables.set('addressId', res.id);",
+                  "  console.log('addressId saved:', res.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Abhay\",\n  \"lastName\": \"Desai\",\n  \"phone\": \"+919876543210\",\n  \"line1\": \"A-101, Shanti Nagar\",\n  \"line2\": \"Near Bus Stop\",\n  \"city\": \"Ahmedabad\",\n  \"province\": \"Gujarat\",\n  \"provinceCode\": \"GJ\",\n  \"zip\": \"380015\",\n  \"country\": \"India\",\n  \"countryCode\": \"IN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["addresses"]
+            },
+            "description": "Pehlo address apne-aap default bane chhe.\n\nDedupe: e j address fari moklo (bhale alag casing/spacing ma) to navo NATHI banto — ejj update thay chhe. \"A-101, Shanti Nagar\" ane \"a 101 shanti nagar\" ek j ganay chhe."
+          }
+        },
+        {
+          "name": "3. Update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"line2\": \"Opp. Garden\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["addresses", "{{addressId}}"]
+            },
+            "description": "Partial update — je fields moklya nathi e ejj rahe chhe."
+          }
+        },
+        {
+          "name": "4. Set default",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/addresses/{{addressId}}/default",
+              "host": ["{{baseUrl}}"],
+              "path": ["addresses", "{{addressId}}", "default"]
+            },
+            "description": "Ek j address default rahe chhe — juno apne-aap hati jaay chhe."
+          }
+        },
+        {
+          "name": "5. Import from past orders",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/addresses/import-from-orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["addresses", "import-from-orders"]
+            },
+            "description": "\"Fetch my shipping addresses based on past order\" checkbox nu endpoint.\n\nApp ne aa login PACHHI call karvanu (verify na response ma nahi) — jethi Shopify dhimu hoy to pan login atke nahi.\n\nFAKT verified phone/email na orders jovaay chhe. Ek j address 15 orders ma hoy to pan ek j vaar save thay chhe.\n\n⚠️ `read_all_orders` scope vagar Shopify fakt CHHELLA 60 DIVAS na orders aape chhe. Response ma `limitedToRecentOrders: true` aa j batave chhe. Juna grahak na varso juna orders e scope approve thay pachhi j malse."
+          }
+        },
+        {
+          "name": "6. Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["addresses", "{{addressId}}"]
+            },
+            "description": "Default address delete karo to bijo koi apne-aap default banii jaay chhe."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.nextCursor) {",
+                  "  pm.collectionVariables.set('nextCursor', res.nextCursor);",
+                  "}",
+                  "pm.test('Shopify shapes leak nathi', () => {",
+                  "  pm.expect(pm.response.text()).to.not.include('gid://');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?limit=20&sort=newest",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "limit", "value": "20", "description": "1-50" },
+                {
+                  "key": "sort",
+                  "value": "newest",
+                  "description": "newest | oldest | title | updated | relevance"
+                },
+                { "key": "search", "value": "paithani", "disabled": true },
+                { "key": "tag", "value": "Silk Dupattas", "disabled": true },
+                { "key": "type", "value": "Dupatta", "disabled": true },
+                { "key": "vendor", "value": "Look & Book", "disabled": true },
+                {
+                  "key": "cursor",
+                  "value": "{{nextCursor}}",
+                  "description": "Aagli page — apne-aap save thay chhe",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Cursor-based pagination (page numbers nahi).\n\nNote: price sort nathi — Shopify na Admin API ma products connection par price no sort key j nathi. Phase 2 ma Postgres thi aavse."
+          }
+        },
+        {
+          "name": "List — next page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?limit=20&sort=newest&cursor={{nextCursor}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "limit", "value": "20" },
+                { "key": "sort", "value": "newest" },
+                { "key": "cursor", "value": "{{nextCursor}}" }
+              ]
+            },
+            "description": "Pehla `List` chalavo — nextCursor apne-aap save thai jashe."
+          }
+        },
+        {
+          "name": "Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?limit=10&search=paithani",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "paithani" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productHandle}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productHandle}}"]
+            },
+            "description": "`:id` = product no handle/slug.\n\nShopify na numeric ids app sudhi kyarey nathi jata — handle aapdo potano data chhe ane Phase 2 ma pan e j rahese."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+
+.env
+.env.local
+.env.*.local
+
+*.log
+npm-debug.log*
+.npm
+
+coverage/
+.nyc_output/
+
+.DS_Store
+Thumbs.db
+
+.idea/
+*.tsbuildinfo
+
+# local postgres/redis volumes
+docker-data/

@@ -1,0 +1,306 @@
+// Phase 1 schema: fakt AUTH + IDENTITY.
+// Products / Orders abhi Shopify mathi live aave chhe (proxy mode) — etle ahiya
+// enu koi table nathi. Phase 2 ma e add thashe, aa schema ne todya vagar.
+//
+// Design rule: Shopify na IDs ahiya "link" tarike store thay chhe, "identity"
+// tarike nahi. Login identity hammesha aapdi potani (Customer.id) chhe.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum CustomerStatus {
+  /// Shopify mathi import thayelo record. Aa vyakti e haju OTP thi potani
+  /// identity prove nathi kari — etle aa record thi LOGIN ALLOWED NATHI.
+  IMPORTED
+  /// OTP verify thai gayo chhe. Login allowed.
+  ACTIVE
+  /// Aa record bija customer ma merge thai gayo chhe (duplicate Shopify record).
+  /// Aa thi login NA thai shake — `mergedIntoId` vaalo record j asli chhe.
+  MERGED
+  BLOCKED
+}
+
+enum IdentifierType {
+  PHONE
+  EMAIL
+}
+
+enum OtpPurpose {
+  /// Login / signup
+  LOGIN
+  /// Already logged-in user bijo email/phone potana account sathe jode
+  /// (juna Shopify guest orders ne link karva mate)
+  LINK_IDENTITY
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+// ---------------------------------------------------------------------------
+// Customer — aapdi potani login identity (Shopify thi swatantra)
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Normalized E.164 (daa.t. +919876543210). Primary login identifier.
+  ///
+  /// ⚠️ INVARIANT: aa be fields ma FAKT verified (ke Shopify mathi imported)
+  /// values j aave chhe. User e type karelu un-verified value ahiya kyarey
+  /// na naakhvu — `resolveOrCreateForLogin()` aa par match kare chhe, etle
+  /// koi bija no email ahiya naakhi ne ena account sudhi pahonchi shakay.
+  primaryPhone String? @unique
+  /// Hammesha lowercase store thay chhe.
+  primaryEmail String? @unique
+
+  /// Registration screen par user e type karelo email — VERIFIED NATHI.
+  /// Fakt contact mate (order confirmation vagere). Order matching ke login
+  /// lookup ma aa kyarey na vaparvo. Unique pan nathi — be users bhulथी ek
+  /// j email type kare to signup fail na thavo joiye.
+  /// Verify thay etle e `primaryEmail` + CustomerIdentity ma jaay chhe.
+  contactEmail String?
+
+  firstName String?
+  lastName  String?
+
+  /// Optional! OTP-only users mate aa null j rahe chhe.
+  /// Shopify na password hashes kyarey nathi malta — etle aa aapdo potano chhe.
+  passwordHash String?
+
+  status CustomerStatus @default(ACTIVE)
+
+  /// "Primary" Shopify customer — Shopify ma write karta vakhte (order create)
+  /// aa vaparvano. Ek vyakti na bija Shopify records ShopifyCustomerLink ma.
+  shopifyCustomerId String? @unique
+
+  /// Jyare khabar pade ke aa record ane bijo record ek j vyakti chhe
+  /// (daa.t. guest checkout thi banela duplicate), tyare aa juno record
+  /// `MERGED` thai ne asli record ne point kare chhe. Delete NA karvu —
+  /// orders/audit trail jodayela hoy chhe.
+  mergedIntoId String?    @db.Uuid
+  mergedInto   Customer?  @relation("CustomerMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom   Customer[] @relation("CustomerMerge")
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  identities    CustomerIdentity[]
+  shopifyLinks  ShopifyCustomerLink[]
+  refreshTokens RefreshToken[]
+  deviceTokens  DeviceToken[]
+  otpCodes      OtpCode[]
+  addresses     Address[]
+
+  @@index([status])
+  @@map("customers")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerIdentity — VERIFIED contact channels
+//
+// Aa table j security no paayo chhe: order matching FAKT ahiya na verified
+// values par thavu joiye. Un-verified email par match karso to bija na orders
+// leak thai jashe.
+// ---------------------------------------------------------------------------
+
+model CustomerIdentity {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type IdentifierType
+  /// Normalized: PHONE => E.164, EMAIL => lowercase trimmed
+  value String
+
+  verifiedAt DateTime
+  isPrimary  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  /// Ek verified email/phone fakt EK j customer no hoi shake.
+  @@unique([type, value])
+  @@index([customerId])
+  @@map("customer_identities")
+}
+
+// ---------------------------------------------------------------------------
+// ShopifyCustomerLink — ek vyakti = ghana Shopify customer records
+//
+// Guest checkout, alag email, POS order — Shopify ma ek j vyakti na 3-4 alag
+// customer records hoy chhe. Aa table badha ne ek Customer sathe jode chhe,
+// jethi enu AAKHU order history app ma dekhaay.
+// Phase 1 ma aa mostly khali rahe; Phase 2 (import) ma bharaay chhe.
+// ---------------------------------------------------------------------------
+
+model ShopifyCustomerLink {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Shopify no numeric/gid customer id
+  shopifyCustomerId String @unique
+
+  /// 'phone' | 'email' | 'manual' — audit mate: aa link kem banyo
+  matchedVia String
+  /// Kaya verified value thi match thayu (audit trail)
+  matchedValue String?
+
+  linkedAt DateTime @default(now())
+
+  @@index([customerId])
+  @@map("shopify_customer_links")
+}
+
+// ---------------------------------------------------------------------------
+// OtpCode — code plain ma kyarey store nathi thato (HMAC-SHA256 + pepper)
+// ---------------------------------------------------------------------------
+
+model OtpCode {
+  id String @id @default(uuid()) @db.Uuid
+
+  identifierType IdentifierType
+  /// Normalized identifier
+  identifier String
+
+  /// HMAC-SHA256(code, OTP_PEPPER) — plain code kyarey DB ma nahi
+  codeHash String
+
+  purpose OtpPurpose @default(LOGIN)
+
+  /// LINK_IDENTITY mate: kayo logged-in user aa identity claim kare chhe
+  customerId String?   @db.Uuid
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(5)
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  requestIp String?
+  createdAt DateTime @default(now())
+
+  @@index([identifier, purpose, expiresAt])
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+// ---------------------------------------------------------------------------
+// RefreshToken — hashed, rotating, reuse-detection sathe
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// SHA-256(raw token). Raw token fakt client pase j hoy chhe.
+  tokenHash String @unique
+
+  /// Rotation family. Ek juno token bije vaar vaparaay (theft signal) to
+  /// aakhi family revoke thai jaay chhe.
+  familyId String @db.Uuid
+
+  deviceId  String?
+  userAgent String?
+  ip        String?
+
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  /// Rotation vakhte aa token ni jagya kayo token e lidhi
+  replacedById String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Address — aapda DB ma, Shopify ma nahi
+//
+// "Fetch my shipping addresses based on past order" vaalu checkbox aa table
+// bhare chhe: user na VERIFIED phone/email na Shopify orders mathi shipping
+// addresses kaadhi ne ahiya save thay chhe.
+//
+// Aa aapdo potano data banii jaay chhe — migration vakhte addresses sathe
+// aavse, Shopify par pacha javu nahi pade.
+// ---------------------------------------------------------------------------
+
+model Address {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  firstName String?
+  lastName  String?
+  phone     String?
+
+  line1        String
+  line2        String?
+  city         String
+  province     String?
+  provinceCode String?
+  zip          String
+  country      String
+  countryCode  String?
+
+  isDefault Boolean @default(false)
+
+  /// Kaya Shopify order mathi aavyo (audit + debugging). Manually ummerelo
+  /// hoy to null.
+  importedFromOrder String?
+
+  /// Normalized address no hash. Ek j address 15 juna orders ma hoy to pan
+  /// ek j vaar save thay — aa vagar user ne 15 same addresses dekhaay.
+  fingerprint String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, fingerprint])
+  @@index([customerId])
+  @@map("addresses")
+}
+
+// ---------------------------------------------------------------------------
+// DeviceToken — push notifications (FCM/APNs)
+// ---------------------------------------------------------------------------
+
+model DeviceToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  platform DevicePlatform
+  token    String         @unique
+  deviceId String?
+
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId])
+  @@map("device_tokens")
+}

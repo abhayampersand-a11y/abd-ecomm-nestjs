@@ -70,8 +70,10 @@ export class AddressesController {
    * POST /addresses/import-from-orders
    *
    * "Fetch my shipping addresses based on past order" checkbox nu endpoint.
-   * OTP verify vakhte apne-aap pan chale chhe — aa manual re-run mate chhe
-   * (daa.t. user e pachhi thi bijo email verify karyo).
+   * FAKT juna ORDERS na shipping addresses jue chhe.
+   *
+   * Navi app builds e `/addresses/sync` vaparvu — e aa ane address book
+   * banne kare chhe. Aa endpoint junа clients mate rakhelu chhe.
    *
    * FAKT verified identifiers na orders jovaay chhe.
    */
@@ -79,5 +81,23 @@ export class AddressesController {
   @HttpCode(HttpStatus.OK)
   async importFromOrders(@CurrentUser() user: AuthenticatedCustomer) {
     return this.addresses.importFromPastOrders(user.id);
+  }
+
+  /**
+   * POST /addresses/sync
+   *
+   * Shopify parthi badhu khenchi lave chhe — customer no ADDRESS BOOK (user e
+   * website par je save karyu hoy) ane juna ORDERS na shipping addresses,
+   * banne. Fingerprint thi dedupe thay chhe.
+   *
+   * Email verify thaya pachhi aa apne-aap chale chhe, etle app e aa jate
+   * call karvani jarur nathi — aa manual re-run ("Refresh" button) mate chhe.
+   *
+   * FAKT verified identifiers na records jovaay chhe.
+   */
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  async sync(@CurrentUser() user: AuthenticatedCustomer) {
+    return this.addresses.syncFromShopify(user.id);
   }
 }

@@ -271,6 +271,16 @@ model Address {
   /// hoy to null.
   importedFromOrder String?
 
+  /// Shopify na customer address book ma aa address no id (numeric, gid nahi).
+  /// Aa hoy to update/delete Shopify ma pan pahonche chhe. Null = haju Shopify
+  /// sudhi gayo j nathi.
+  shopifyAddressId String? @unique
+
+  /// Chhelli vaar kyare Shopify sathe sync thayo. Null hoy ane
+  /// `shopifyAddressId` pan null hoy = push baaki chhe (Shopify down hatu,
+  /// ke countryCode nahoto malto). Retry aa par thi khabar pade chhe.
+  syncedAt DateTime?
+
   /// Normalized address no hash. Ek j address 15 juna orders ma hoy to pan
   /// ek j vaar save thay — aa vagar user ne 15 same addresses dekhaay.
   fingerprint String

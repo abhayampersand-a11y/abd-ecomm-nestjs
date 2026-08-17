@@ -1,7 +1,8 @@
-import { Logger, Module, type Provider } from '@nestjs/common';
+import { forwardRef, Logger, Module, type Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { AddressesModule } from '../addresses/addresses.module';
 import type { Env } from '../config/env.schema';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -41,6 +42,9 @@ const otpSenderProvider: Provider = {
 
 @Module({
   imports: [
+    // Identity verify thay etle addresses apne-aap khenchiye chhiye.
+    // Circular chhe — juo AddressesModule.
+    forwardRef(() => AddressesModule),
     PassportModule.register({ defaultStrategy: 'jwt', session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],

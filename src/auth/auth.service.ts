@@ -1,6 +1,13 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OtpPurpose } from '@prisma/client';
+import { AddressesService } from '../addresses/addresses.service';
 import type { Env } from '../config/env.schema';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeIdentifier } from '../common/utils/identifier.util';
@@ -24,6 +31,17 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly identity: IdentityService,
     private readonly config: ConfigService<Env, true>,
+    /**
+     * ⚠️ Circular dependency chhe: AddressesModule ne JwtAuthGuard ane
+     * IdentityService mate AuthModule joiye chhe, ane AuthModule ne identity
+     * verify pachhi addresses khenchva mate AddressesService joiye chhe.
+     *
+     * `forwardRef` vagar Nest boot vakhte "Nest can't resolve dependencies"
+     * thi fail thashe. Banne baaju forwardRef hovu jaruri chhe — fakt ek
+     * baaju mukso to pan e j error aavse.
+     */
+    @Inject(forwardRef(() => AddressesService))
+    private readonly addresses: AddressesService,
   ) {}
 
   private get defaultCountry(): string {
@@ -290,7 +308,11 @@ export class AuthService {
     customerId: string,
     rawIdentifier: string,
     code: string,
-  ): Promise<{ linkedShopifyRecords: number; customer: CustomerProfileDto }> {
+  ): Promise<{
+    linkedShopifyRecords: number;
+    importedAddresses: number;
+    customer: CustomerProfileDto;
+  }> {
     const identifier = normalizeIdentifier(rawIdentifier, this.defaultCountry);
 
     const { customerId: otpOwner } = await this.otp.verify({
@@ -326,14 +348,39 @@ export class AuthService {
       await this.reconcileShopifySafely(customerId, identifier);
     }
 
+    // Have addresses khenchi laiye — juna Shopify records have jodai gaya
+    // chhe, etle aa j saacho kshan chhe. User "Verify" dabaavi ne rah jue
+    // chhe, ane ene ek j vaar ma badhu male e j saari UX chhe.
+    const importedAddresses = await this.importAddressesSafely(customerId);
+
     this.logger.log(
       `Identity linked — customer=${customerId} type=${identifier.type} ` +
-        `shopifyRecordsLinked=${linkedCount}`,
+        `shopifyRecordsLinked=${linkedCount} addressesImported=${importedAddresses}`,
     );
 
     return {
       linkedShopifyRecords: linkedCount,
+      importedAddresses,
       customer: await this.getProfile(customerId),
     };
+  }
+
+  /**
+   * Shopify parthi addresses khenchvu — address book ane juna orders, banne.
+   *
+   * NEVER-THROW: aa fail thay to pan email verification safal j chhe. User
+   * pachhi `/addresses/sync` thi fari try kari shake chhe.
+   */
+  private async importAddressesSafely(customerId: string): Promise<number> {
+    try {
+      const result = await this.addresses.syncFromShopify(customerId);
+      return result.fromAddressBook + result.fromPastOrders;
+    } catch (err) {
+      this.logger.warn(
+        `Address sync failed for ${customerId} (verification chalu rahi): ` +
+          `${(err as Error).message}`,
+      );
+      return 0;
+    }
   }
 }

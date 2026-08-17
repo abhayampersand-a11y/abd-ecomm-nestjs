@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { ShopifyAddressService } from './shopify-address.service';
 import { ShopifyCustomerService } from './shopify-customer.service';
 import { ShopifyGraphqlClient } from './shopify-graphql.client';
 import { ShopifyTokenService } from './shopify-token.service';
@@ -12,7 +13,17 @@ import { ShopifyTokenService } from './shopify-token.service';
  */
 @Global()
 @Module({
-  providers: [ShopifyTokenService, ShopifyGraphqlClient, ShopifyCustomerService],
-  exports: [ShopifyTokenService, ShopifyGraphqlClient, ShopifyCustomerService],
+  providers: [
+    ShopifyTokenService,
+    ShopifyGraphqlClient,
+    ShopifyCustomerService,
+    ShopifyAddressService,
+  ],
+  exports: [
+    ShopifyTokenService,
+    ShopifyGraphqlClient,
+    ShopifyCustomerService,
+    ShopifyAddressService,
+  ],
 })
 export class ShopifyModule {}

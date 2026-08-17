@@ -27,13 +27,13 @@ export function normalizeIdentifier(
   const trimmed = raw?.trim();
 
   if (!trimmed) {
-    throw new BadRequestException('Phone number athva email jaruri chhe');
+    throw new BadRequestException('Phone number or email is required');
   }
 
   if (trimmed.includes('@')) {
     const email = trimmed.toLowerCase();
     if (!EMAIL_RE.test(email)) {
-      throw new BadRequestException('Email valid nathi');
+      throw new BadRequestException('Email is not valid');
     }
     return { type: IdentifierType.EMAIL, value: email, masked: maskEmail(email) };
   }
@@ -44,7 +44,7 @@ export function normalizeIdentifier(
   );
 
   if (!phone?.isValid()) {
-    throw new BadRequestException('Phone number valid nathi');
+    throw new BadRequestException('Phone number is not valid');
   }
 
   const e164 = phone.number;

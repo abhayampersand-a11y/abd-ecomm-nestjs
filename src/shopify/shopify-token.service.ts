@@ -120,7 +120,7 @@ export class ShopifyTokenService {
       const body = await res.text().catch(() => '');
       throw new Error(
         `Shopify token request failed (${res.status}). ` +
-          `Client ID/Secret ane store domain check karo. ${body.slice(0, 300)}`,
+          `Check the Client ID/Secret and store domain. ${body.slice(0, 300)}`,
       );
     }
 

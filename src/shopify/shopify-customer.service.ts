@@ -109,7 +109,7 @@ export class ShopifyCustomerService {
     lastName?: string | null;
   }): Promise<string | null> {
     if (!input.phone && !input.email) {
-      this.logger.warn('createCustomer: phone ke email — ek to joiye j');
+      this.logger.warn('createCustomer: either a phone or an email is required');
       return null;
     }
 

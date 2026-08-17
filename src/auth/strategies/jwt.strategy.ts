@@ -37,7 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
    */
   async validate(payload: AccessTokenPayload): Promise<AuthenticatedCustomer> {
     if (payload.typ !== 'access') {
-      throw new UnauthorizedException('Token valid nathi');
+      throw new UnauthorizedException('Token is not valid');
     }
 
     const customer = await this.prisma.customer.findUnique({
@@ -51,7 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
 
     if (!customer || customer.status !== CustomerStatus.ACTIVE) {
-      throw new UnauthorizedException('Session valid nathi. Fari login karo.');
+      throw new UnauthorizedException('Session is not valid. Please log in again.');
     }
 
     return {

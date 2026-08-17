@@ -16,7 +16,7 @@ export const envSchema = z.object({
 
   JWT_ACCESS_SECRET: z
     .string()
-    .min(32, 'JWT_ACCESS_SECRET ochha ma ochha 32 characters no hovo joiye'),
+    .min(32, 'JWT_ACCESS_SECRET must be at least 32 characters long'),
   JWT_ACCESS_TTL: z.coerce.number().int().positive().default(900),
   JWT_ISSUER: z.string().default('abd-ecomm-api'),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(60),
@@ -30,7 +30,7 @@ export const envSchema = z.object({
   OTP_MAX_PER_IP_PER_HOUR: z.coerce.number().int().positive().default(20),
   OTP_PEPPER: z
     .string()
-    .min(32, 'OTP_PEPPER ochha ma ochha 32 characters no hovo joiye'),
+    .min(32, 'OTP_PEPPER must be at least 32 characters long'),
   OTP_EXPOSE_IN_RESPONSE: z
     .enum(['true', 'false'])
     .default('false')
@@ -111,8 +111,8 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     !parsed.data.ALLOW_OTP_EXPOSE_IN_PROD
   ) {
     throw new Error(
-      'OTP_EXPOSE_IN_RESPONSE production ma true na hoi shake — aa OTP ne API response ma leak kare chhe. ' +
-        'Staging par kharekhar joitu hoy to ALLOW_OTP_EXPOSE_IN_PROD=true set karo.',
+      'OTP_EXPOSE_IN_RESPONSE cannot be true in production — it leaks the OTP in the API response. ' +
+        'If you really need it on staging, set ALLOW_OTP_EXPOSE_IN_PROD=true.',
     );
   }
 

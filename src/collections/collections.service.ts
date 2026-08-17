@@ -54,7 +54,7 @@ export class CollectionsService {
 
     const collection = await this.repo.findByHandle(handle);
     if (!collection) {
-      throw new NotFoundException('Aa collection male nahi');
+      throw new NotFoundException('Collection not found');
     }
 
     await this.redis.setJson(key, collection, ttl);
@@ -77,7 +77,7 @@ export class CollectionsService {
 
     const result = await this.repo.listProducts(params);
     if (!result) {
-      throw new NotFoundException('Aa collection male nahi');
+      throw new NotFoundException('Collection not found');
     }
 
     await this.redis.setJson(key, result, ttl);

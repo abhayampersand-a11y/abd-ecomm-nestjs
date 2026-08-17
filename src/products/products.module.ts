@@ -32,8 +32,8 @@ const productRepositoryProvider: Provider = {
         return new ShopifyProductRepository(shopify);
       case 'db':
         throw new Error(
-          'PRODUCT_SOURCE=db haju ready nathi. Phase 2 ma DbProductRepository ' +
-            'lakhya pachhi aa case ummervo.',
+          'PRODUCT_SOURCE=db is not ready yet. Add this case after writing ' +
+            'DbProductRepository in Phase 2.',
         );
       default:
         throw new Error(`Unknown PRODUCT_SOURCE: ${source}`);

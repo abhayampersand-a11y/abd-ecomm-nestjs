@@ -144,7 +144,7 @@ export class ShopifyGraphqlClient {
 
       if (throttled) {
         throw new RetryableError(
-          'THROTTLED — cost bucket khaali',
+          'THROTTLED — cost bucket empty',
           this.waitForBucket(payload.extensions?.cost?.throttleStatus, attempt),
         );
       }
@@ -158,7 +158,7 @@ export class ShopifyGraphqlClient {
     }
 
     if (!payload.data) {
-      throw new ShopifyGraphqlError('Shopify e khali response aapyo', undefined, payload);
+      throw new ShopifyGraphqlError('Shopify returned an empty response', undefined, payload);
     }
 
     return payload.data;

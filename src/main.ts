@@ -48,22 +48,22 @@ async function bootstrap(): Promise<void> {
 
   if (config.get('OTP_EXPOSE_IN_RESPONSE', { infer: true })) {
     logger.warn(
-      'OTP_EXPOSE_IN_RESPONSE=true — OTP API response ma dekhaay chhe (dev only!)',
+      'OTP_EXPOSE_IN_RESPONSE=true — the OTP is visible in the API response (dev only!)',
     );
 
     if (config.get('ALLOW_OTP_EXPOSE_IN_PROD', { infer: true })) {
       logger.warn(
-        '⚠️  ALLOW_OTP_EXPOSE_IN_PROD=true — production build par OTP khullo chhe. ' +
-          'Koi pan gme te account ma login kari shake. Real users pehla aa kaadhi naakho.',
+        '⚠️  ALLOW_OTP_EXPOSE_IN_PROD=true — the OTP is exposed on a production build. ' +
+          'Anyone can log into any account. Remove this before real users.',
       );
     }
   }
 
   if (!config.get('SHOPIFY_CLIENT_ID', { infer: true })) {
     logger.warn(
-      'Shopify credentials nathi — /products endpoints fail thashe. ' +
-        '.env ma SHOPIFY_CLIENT_ID ane SHOPIFY_CLIENT_SECRET bharo ' +
-        '(Dev Dashboard → abd-mobile-api → Settings), pachhi: npm run shopify:verify',
+      'Shopify credentials missing — /products endpoints will fail. ' +
+        'Set SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET in .env ' +
+        '(Dev Dashboard → abd-mobile-api → Settings), then: npm run shopify:verify',
     );
   }
 }

@@ -235,7 +235,7 @@ export class AddressesService {
 
     // "Bija no address chhe" ane "chhe j nahi" — banne mate 404.
     // Nahi to id try kari ne khabar padi jaay ke kayo address exist kare chhe.
-    if (!address) throw new NotFoundException('Address male nahi');
+    if (!address) throw new NotFoundException('Address not found');
     return address;
   }
 

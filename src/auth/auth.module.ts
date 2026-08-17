@@ -30,8 +30,8 @@ const otpSenderProvider: Provider = {
       case 'msg91':
       case 'twilio':
         throw new Error(
-          `OTP_PROVIDER="${provider}" haju implement nathi thayo. ` +
-            `src/auth/otp/ ma e sender add karo (OtpSender interface implement karine).`,
+          `OTP_PROVIDER="${provider}" is not implemented yet. ` +
+            `Add that sender in src/auth/otp/ (implementing the OtpSender interface).`,
         );
       default:
         throw new Error(`Unknown OTP_PROVIDER: ${provider}`);

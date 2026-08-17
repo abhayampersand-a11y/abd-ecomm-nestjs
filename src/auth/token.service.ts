@@ -80,7 +80,7 @@ export class TokenService {
     });
 
     if (!existing) {
-      throw new UnauthorizedException('Session valid nathi. Fari login karo.');
+      throw new UnauthorizedException('Session is not valid. Please log in again.');
     }
 
     if (existing.revokedAt) {
@@ -89,15 +89,15 @@ export class TokenService {
           `(family ${existing.familyId}) — revoking whole family`,
       );
       await this.revokeFamily(existing.familyId);
-      throw new UnauthorizedException('Session valid nathi. Fari login karo.');
+      throw new UnauthorizedException('Session is not valid. Please log in again.');
     }
 
     if (existing.expiresAt <= new Date()) {
-      throw new UnauthorizedException('Session expire thai gayu. Fari login karo.');
+      throw new UnauthorizedException('Session has expired. Please log in again.');
     }
 
     if (existing.customer.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Account active nathi.');
+      throw new UnauthorizedException('Account is not active.');
     }
 
     const pair = await this.issuePair(existing.customerId, ctx, existing.familyId);

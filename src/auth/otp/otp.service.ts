@@ -122,12 +122,12 @@ export class OtpService {
 
     // Message hammesha ek j — "code khoto" ke "code j nathi" e farak na kaho.
     if (!record) {
-      throw new UnauthorizedException('OTP khoto chhe athva expire thai gayo chhe');
+      throw new UnauthorizedException('OTP is incorrect or has expired');
     }
 
     if (record.attempts >= record.maxAttempts) {
       await this.consume(record.id);
-      throw new UnauthorizedException('OTP khoto chhe athva expire thai gayo chhe');
+      throw new UnauthorizedException('OTP is incorrect or has expired');
     }
 
     const expected = record.codeHash;
@@ -146,7 +146,7 @@ export class OtpService {
         await this.consume(record.id);
       }
 
-      throw new UnauthorizedException('OTP khoto chhe athva expire thai gayo chhe');
+      throw new UnauthorizedException('OTP is incorrect or has expired');
     }
 
     await this.consume(record.id);
@@ -216,7 +216,7 @@ export class OtpService {
     if (!gotLock) {
       const retryAfter = await this.redis.ttl(cooldownKey);
       throw new TooManyRequestsException(
-        `Thodi vaar rah juo, pachhi fari try karo`,
+        `Please wait a moment and try again`,
         retryAfter || cooldownSeconds,
       );
     }
@@ -233,7 +233,7 @@ export class OtpService {
         `OTP hourly limit hit for identifier ${identifier.masked} (${idHits} requests)`,
       );
       throw new TooManyRequestsException(
-        'Bahu badha OTP requests thaya. Ek kalak pachhi try karo.',
+        'Too many OTP requests. Please try again after an hour.',
         3600,
       );
     }
@@ -244,14 +244,14 @@ export class OtpService {
       if (ipHits > perIpMax) {
         this.logger.warn(`OTP hourly limit hit for IP ${ip} (${ipHits} requests)`);
         throw new TooManyRequestsException(
-          'Bahu badha OTP requests thaya. Ek kalak pachhi try karo.',
+          'Too many OTP requests. Please try again after an hour.',
           3600,
         );
       }
     }
 
     if (!identifier.value) {
-      throw new BadRequestException('Identifier jaruri chhe');
+      throw new BadRequestException('Identifier is required');
     }
   }
 }

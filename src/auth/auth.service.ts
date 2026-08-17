@@ -227,7 +227,7 @@ export class AuthService {
     });
 
     if (!customer) {
-      throw new UnauthorizedException('Account male nahi');
+      throw new UnauthorizedException('Account not found');
     }
 
     return toCustomerProfileDto(customer);
@@ -262,7 +262,7 @@ export class AuthService {
       // Ahiya "bija account no chhe" kehvu safe chhe: user already logged-in
       // chhe ane ene khabar padvi joiye ke aa kem add nathi thai shakto.
       throw new UnauthorizedException(
-        'Aa email/phone bija account sathe jodayelo chhe',
+        'This email/phone is already linked to another account',
       );
     }
 
@@ -302,7 +302,7 @@ export class AuthService {
     // OTP je user mate banyo hato e j user aavyo chhe ne? Aa check vagar
     // A e potano OTP levo ane B na token sathe verify karvu — e chali jaat.
     if (otpOwner !== customerId) {
-      throw new UnauthorizedException('OTP khoto chhe athva expire thai gayo chhe');
+      throw new UnauthorizedException('OTP is incorrect or has expired');
     }
 
     await this.prisma.$transaction(async (tx) => {

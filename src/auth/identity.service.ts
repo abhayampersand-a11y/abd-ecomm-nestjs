@@ -96,7 +96,7 @@ export class IdentityService {
         // Koi biju aa email/phone pehla thi verify kari chuku chhe. Aa
         // silently steal na thai shake.
         throw new ConflictException(
-          'Aa email/phone bija account sathe jodayelo chhe',
+          'This email/phone is already linked to another account',
         );
       }
       return;
@@ -428,7 +428,7 @@ export class IdentityService {
 
   private assertLoginAllowed(customer: Customer): void {
     if (customer.status === CustomerStatus.BLOCKED) {
-      throw new ForbiddenException('Aa account block thayelu chhe');
+      throw new ForbiddenException('This account has been blocked');
     }
   }
 }

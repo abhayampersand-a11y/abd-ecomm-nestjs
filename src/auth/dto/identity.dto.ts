@@ -9,7 +9,7 @@ import { IsNotEmpty, IsString, Length, MaxLength } from 'class-validator';
  */
 export class RequestIdentityOtpDto {
   @IsString()
-  @IsNotEmpty({ message: 'Phone number athva email jaruri chhe' })
+  @IsNotEmpty({ message: 'Phone number or email is required' })
   @MaxLength(255)
   identifier!: string;
 }
@@ -21,6 +21,6 @@ export class VerifyIdentityDto {
   identifier!: string;
 
   @IsString()
-  @Length(4, 8, { message: 'OTP valid nathi' })
+  @Length(4, 8, { message: 'OTP is not valid' })
   code!: string;
 }

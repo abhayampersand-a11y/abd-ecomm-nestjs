@@ -10,7 +10,7 @@ export class ShopifyUnavailableException extends HttpException {
     super(
       {
         statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-        message: 'Atyare service uplabdh nathi. Thodi vaar pachhi try karo.',
+        message: 'Service is currently unavailable. Please try again shortly.',
         error: 'Service Unavailable',
       },
       HttpStatus.SERVICE_UNAVAILABLE,
@@ -21,9 +21,9 @@ export class ShopifyUnavailableException extends HttpException {
 export class ShopifyConfigException extends Error {
   constructor(missing: string) {
     super(
-      `Shopify config adhuru chhe: ${missing}. ` +
-        `.env ma SHOPIFY_STORE_DOMAIN, SHOPIFY_CLIENT_ID ane ` +
-        `SHOPIFY_CLIENT_SECRET bharo (Dev Dashboard → app → Settings).`,
+      `Shopify config is incomplete: ${missing}. ` +
+        `Set SHOPIFY_STORE_DOMAIN, SHOPIFY_CLIENT_ID and ` +
+        `SHOPIFY_CLIENT_SECRET in .env (Dev Dashboard → app → Settings).`,
     );
     this.name = 'ShopifyConfigException';
   }

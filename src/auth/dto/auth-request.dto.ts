@@ -14,7 +14,7 @@ export class RequestOtpDto {
    * Daa.t. "9876543210", "+91 98765 43210", "abc@gmail.com"
    */
   @IsString()
-  @IsNotEmpty({ message: 'Phone number athva email jaruri chhe' })
+  @IsNotEmpty({ message: 'Phone number or email is required' })
   @MaxLength(255)
   identifier!: string;
 }
@@ -26,7 +26,7 @@ export class VerifyOtpDto {
   identifier!: string;
 
   @IsString()
-  @Length(4, 8, { message: 'OTP valid nathi' })
+  @Length(4, 8, { message: 'OTP is not valid' })
   code!: string;
 
   /** Session ne device sathe bandhva mate — logout/audit ma kaam aave chhe */
@@ -69,7 +69,7 @@ export class UpdateProfileDto {
    * `/auth/identities/verify` thi verify karvo padse.
    */
   @IsOptional()
-  @IsEmail({}, { message: 'Email valid nathi' })
+  @IsEmail({}, { message: 'Email is not valid' })
   @MaxLength(255)
   email?: string;
 }

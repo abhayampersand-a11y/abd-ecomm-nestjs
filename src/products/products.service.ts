@@ -52,7 +52,7 @@ export class ProductsService {
 
     const product = await this.repo.findById(id);
     if (!product) {
-      throw new NotFoundException('Aa product male nahi');
+      throw new NotFoundException('Product not found');
     }
 
     await this.redis.setJson(key, product, ttl);

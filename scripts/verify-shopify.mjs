@@ -236,4 +236,105 @@ if (ordersData) {
   );
 }
 
+// -- 6. Collections list query ---------------------------------------------
+const collectionsQuery = `
+  query CollectionsList($first: Int!, $sortKey: CollectionSortKeys, $reverse: Boolean) {
+    collections(first: $first, sortKey: $sortKey, reverse: $reverse) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        id handle title updatedAt
+        productsCount { count }
+        image { url altText width height }
+      }
+    }
+  }`;
+
+const collectionsData = await gql('6. Collections list query', collectionsQuery, {
+  first: 5,
+  sortKey: 'TITLE',
+  reverse: false,
+});
+if (!collectionsData) process.exit(1);
+
+const collections = collectionsData.collections.nodes;
+console.log(c.dim(`     ${collections.length} collection(s) malya`));
+for (const col of collections) {
+  console.log(
+    c.dim(
+      `       · ${col.handle}  ${col.productsCount?.count ?? '?'} products  "${col.title}"`,
+    ),
+  );
+}
+console.log();
+
+if (collections.length === 0) {
+  console.log(c.warn('  ⚠ Store ma ek pan collection nathi — baki na checks skip.\n'));
+  process.exit(0);
+}
+
+// Jena ma kharekhar products hoy evu collection pasand kariye — khali
+// collection thi products query "pass" to thaay pan kai verify na thaay.
+const col = collections.find((x) => (x.productsCount?.count ?? 0) > 0) ?? collections[0];
+
+// -- 7. Collection detail query --------------------------------------------
+const colDetailQuery = `
+  query CollectionDetail($handle: String!) {
+    collectionByIdentifier(identifier: { handle: $handle }) {
+      id handle title updatedAt description
+      productsCount { count }
+      image { url altText width height }
+    }
+  }`;
+
+const colDetailData = await gql(
+  `7. Collection detail query (${col.handle})`,
+  colDetailQuery,
+  { handle: col.handle },
+);
+if (!colDetailData) process.exit(1);
+
+if (!colDetailData.collectionByIdentifier) {
+  console.log(
+    c.bad('     collectionByIdentifier e null aapyu — handle lookup kaam nathi karto\n'),
+  );
+  process.exit(1);
+}
+console.log();
+
+// -- 8. Collection products query ------------------------------------------
+const colProductsQuery = `
+  query CollectionProducts($handle: String!, $first: Int!, $sortKey: ProductCollectionSortKeys, $reverse: Boolean) {
+    collectionByIdentifier(identifier: { handle: $handle }) {
+      id
+      products(first: $first, after: null, sortKey: $sortKey, reverse: $reverse) {
+        pageInfo { hasNextPage endCursor }
+        nodes { handle title status }
+      }
+    }
+  }`;
+
+const colProductsData = await gql(
+  `8. Collection products query (${col.handle})`,
+  colProductsQuery,
+  { handle: col.handle, first: 5, sortKey: 'COLLECTION_DEFAULT', reverse: false },
+);
+if (!colProductsData) process.exit(1);
+
+const colProducts = colProductsData.collectionByIdentifier?.products.nodes ?? [];
+const inactive = colProducts.filter((p) => p.status !== 'ACTIVE').length;
+
+console.log(c.dim(`     ${colProducts.length} product(s) malya`));
+for (const p of colProducts) {
+  console.log(c.dim(`       · ${p.handle} [${p.status}]`));
+}
+if (inactive > 0) {
+  console.log(
+    c.dim(
+      `     ${inactive} draft/archived — repository ma filter thai jashe ` +
+        '(Collection.products par query arg nathi)',
+    ),
+  );
+}
+console.log();
+
 console.log(c.ok('  ✓ Badhu barabar chhe. `npm run start:dev` chalavo.\n'));

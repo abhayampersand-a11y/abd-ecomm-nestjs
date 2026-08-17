@@ -50,6 +50,13 @@ async function bootstrap(): Promise<void> {
     logger.warn(
       'OTP_EXPOSE_IN_RESPONSE=true — OTP API response ma dekhaay chhe (dev only!)',
     );
+
+    if (config.get('ALLOW_OTP_EXPOSE_IN_PROD', { infer: true })) {
+      logger.warn(
+        '⚠️  ALLOW_OTP_EXPOSE_IN_PROD=true — production build par OTP khullo chhe. ' +
+          'Koi pan gme te account ma login kari shake. Real users pehla aa kaadhi naakho.',
+      );
+    }
   }
 
   if (!config.get('SHOPIFY_CLIENT_ID', { infer: true })) {

@@ -1,19 +1,22 @@
 {
   "info": {
     "name": "abd-ecomm-nestjs",
-    "description": "Shopify na upar aapno API layer.\n\nUSE KARVANI RIT:\n1. `Auth / 1. Request OTP` chalavo — devCode apne-aap save thai jashe\n2. `Auth / 2. Verify OTP` chalavo — code apne-aap bharaay chhe, ane accessToken + refreshToken save thai jaay chhe\n3. Have baaki na badha requests sidha chale chhe — Bearer token apne-aap lagi jaay chhe\n\nBadha tokens collection variables ma save thay chhe, etle manually copy-paste karvanu nathi.",
+    "description": "Our API layer on top of Shopify.\n\nHOW TO USE:\n1. Run `Auth / 1. Request OTP` — devCode is saved automatically\n2. Run `Auth / 2. Verify OTP` — the code is filled in for you, and accessToken + refreshToken are saved\n3. Every other request now works — the Bearer token is attached automatically\n\nAll tokens are stored in collection variables, so there is nothing to copy by hand.\n\nA NOTE ON THE DOCUMENTATION IN THIS COLLECTION:\nEvery request documents where each response key comes from, using this notation:\n\n    responseKey  ← sourceField\n\nThe source is either a Shopify GraphQL field, a Postgres column, or a value\nwe compute ourselves. Comments cannot live inside the request body itself —\nPostman sends the raw body to the server as-is, so a `//` comment would\nbreak JSON parsing. All documentation therefore lives in each request's\ndescription, visible in the panel on the right.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3001/api/v1" },
     { "key": "identifier", "value": "9876543210" },
-    { "key": "linkIdentifier", "value": "juno-email@example.com" },
+    { "key": "linkIdentifier", "value": "old-email@example.com" },
     { "key": "productHandle", "value": "peach-traditional-paithani-dupatta" },
+    { "key": "collectionHandle", "value": "dupattas" },
     { "key": "devCode", "value": "" },
     { "key": "linkDevCode", "value": "" },
     { "key": "accessToken", "value": "" },
     { "key": "refreshToken", "value": "" },
     { "key": "nextCursor", "value": "" },
+    { "key": "collectionCursor", "value": "" },
+    { "key": "collectionProductCursor", "value": "" },
     { "key": "addressId", "value": "" }
   ],
   "item": [
@@ -23,7 +26,7 @@
         "method": "GET",
         "header": [],
         "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
-        "description": "Postgres, Redis ane Shopify config nu status."
+        "description": "Status of Postgres, Redis and the Shopify configuration.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nstatus             ← \"ok\" when postgres AND redis are both \"up\",\n                     otherwise \"degraded\"\n\nservices.postgres  ← whether Prisma's `SELECT 1` succeeded\nservices.redis     ← the reply to a Redis PING\n\nservices.shopify   ← A CONFIG CHECK ONLY — \"configured\" | \"not-configured\"\n                     ⚠️ Shopify is deliberately NOT pinged here. The health\n                     check runs every few seconds, and pinging Shopify would\n                     drain its cost bucket. So \"configured\" means \"the\n                     credentials are present\", NOT \"Shopify is reachable\".\n\ntimestamp          ← the server's current time, ISO 8601\n\n────────────────────────────────\nNOTES\n────────────────────────────────\nThis endpoint is exempt from rate limiting (@SkipThrottle) — the platform\nhealth check hits it constantly and must never be throttled.\n\nThis is the path configured as Render's Health Check Path:\n  /api/v1/health"
       }
     },
     {
@@ -38,12 +41,16 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
+                  "",
+                  "// Save the OTP so the next request can fill it in automatically.",
+                  "// Only present when OTP_EXPOSE_IN_RESPONSE=true.",
                   "if (res.devCode) {",
                   "  pm.collectionVariables.set('devCode', res.devCode);",
                   "  console.log('OTP saved:', res.devCode);",
                   "}",
+                  "",
                   "pm.test('200', () => pm.response.to.have.status(200));",
-                  "pm.test('destination masked chhe', () => pm.expect(res.sentTo).to.include('*'));"
+                  "pm.test('destination is masked', () => pm.expect(res.sentTo).to.include('*'));"
                 ]
               }
             }
@@ -60,7 +67,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "otp", "request"]
             },
-            "description": "Phone ya email — banne aa ek j field ma.\n\nResponse hammesha ek j hoy chhe, user exist kare ke na kare (enumeration proof).\n\nDev ma `devCode` ma OTP aave chhe ane e apne-aap next request mate save thai jaay chhe."
+            "description": "Sends a one-time password to a phone number or an email address.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   A phone number OR an email address — both go in this SINGLE\n             field. The app does not need two separate screens; the server\n             works out which one it is and normalises it.\n             All of these are accepted:\n               \"9876543210\", \"+91 98765 43210\", \"user@gmail.com\"\n             A phone number without a country code gets\n             DEFAULT_COUNTRY_CODE (default IN) applied.\n             Required, max 255 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsent                ← ALWAYS `true`.\n                      The response is identical whether or not the user\n                      exists. Otherwise someone could submit phone numbers\n                      one by one and learn which are registered — an\n                      account enumeration attack.\n\nsentTo              ← the destination, masked: \"+91******3210\"\n                      Lets the app say \"we sent a code to this number\"\n                      without echoing the full value back.\n\nexpiresAt           ← now + OTP_TTL_SECONDS (default 300s), as ISO 8601\nresendAfterSeconds  ← OTP_RESEND_COOLDOWN_SECONDS (default 60)\n                      The app should disable its \"Resend\" button for this\n                      many seconds.\n\ndevCode             ← ONLY present when OTP_EXPOSE_IN_RESPONSE=true.\n                      ⚠️ This key DOES NOT EXIST in production, so the app\n                      must never depend on it. The test script saves it to\n                      `{{devCode}}` automatically.\n                      When OTP_EXPOSE_IN_RESPONSE=false, the code is printed\n                      to the server logs instead (the console OTP sender).\n\n────────────────────────────────\nRATE LIMITS — THREE SEPARATE LAYERS\n────────────────────────────────\n1. Route level:    10 requests/min per IP (@Throttle)\n2. Per identifier: OTP_MAX_PER_IDENTIFIER_PER_HOUR (default 5)\n3. Per IP:         OTP_MAX_PER_IP_PER_HOUR (default 20)\n\nBreaching any of them returns 429. The counters live in Redis.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — identifier missing, or longer than 255 characters\n429 — any of the three rate limits above was exceeded"
           }
         },
         {
@@ -72,11 +79,14 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
+                  "",
+                  "// Save both tokens so every protected request below just works.",
                   "if (res.tokens) {",
                   "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
                   "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
                   "  console.log('Tokens saved. isNewUser =', res.isNewUser);",
                   "}",
+                  "",
                   "pm.test('200', () => pm.response.to.have.status(200));"
                 ]
               }
@@ -94,7 +104,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "otp", "verify"]
             },
-            "description": "OTP verify => login.\n\nAlag signup endpoint nathi: navo user hoy to ahiya j bane chhe, ane juno (Shopify no) hoy to eno existing record ACTIVE thai jaay chhe — enu badhu history sathe.\n\nTokens apne-aap save thai jaay chhe."
+            "description": "Verifies the OTP and logs the user in.\n\n📌 THERE IS NO SEPARATE SIGNUP ENDPOINT. If the user is new they are created\nhere; if they already exist as an IMPORTED Shopify record, that record is\nactivated instead — keeping all of their history.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to `1. Request OTP`. The OTP is\n             bound to that identifier, so anything else will not match.\n             Required, max 255 characters.\n\ncode         The one-time password. Filled in from `{{devCode}}` during\n             development. Length is OTP_LENGTH (default 6); the field\n             accepts 4-8 characters.\n\ndeviceId     Ties the session to a device, which is what makes per-device\n             logout and session auditing possible. Optional, but the app\n             should always send a stable value. Max 128 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nisNewUser             ← whether this is the first ever login for this\n                        identifier. When `true` the app should show the\n                        registration screen → `4. Update profile`.\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records were\n                        attached to this account during login. Greater than\n                        zero for someone who previously checked out on the\n                        website as a guest.\n\ncustomer              ← the profile object — exactly the same shape as\n                        `3. Me`, documented there.\n\ntokens.accessToken    ← a JWT, valid for JWT_ACCESS_TTL (default 900s).\n                        Send it on protected requests as:\n                          Authorization: Bearer <token>\n\ntokens.refreshToken   ← an opaque random string (NOT a JWT), valid for\n                        REFRESH_TOKEN_TTL_DAYS (default 60 days).\n\ntokens.expiresIn      ← remaining lifetime of accessToken, IN SECONDS\ntokens.tokenType      ← always \"Bearer\"\n\nThe test script stores accessToken and refreshToken in collection variables,\nso nothing needs to be copied manually.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong code, expired code, or OTP_MAX_ATTEMPTS (default 5) exhausted\n429 — 20 requests/min per IP exceeded"
           }
         },
         {
@@ -107,11 +117,11 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "me"]
             },
-            "description": "Profile + badha verified email/phone.\n\n`emailVerified: false` hoy to app \"Verify your email to see older orders\" batavi shake."
+            "description": "The signed-in user's profile, including every verified email and phone.\n\nRequires the Authorization header.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid                   ← OUR Customer.id (a UUID).\n                       This is never a Shopify id. Shopify's numeric ids do\n                       not leave the server.\n\nphone                ← Customer.primaryPhone (the verified one)\n                       `null` if the user signed up with an email.\n\nemail                ← Customer.primaryEmail (VERIFIED) when present,\n                       otherwise Customer.contactEmail (the UNVERIFIED one\n                       typed into the registration screen).\n                       ⚠️ So `email` can be populated while\n                       `emailVerified` is still `false` — they are two\n                       different things.\n\nemailVerified        ← whether any verified identity of type EMAIL exists\nphoneVerified        ← whether any verified identity of type PHONE exists\n\nfirstName            ← Customer.firstName, set by `4. Update profile`\nlastName             ← Customer.lastName, set by `4. Update profile`\n\nhasPassword          ← whether Customer.passwordHash is set.\n                       Always `false` in Phase 1 — login is OTP only. The\n                       field exists so the app does not break when password\n                       login is added later.\n\nverifiedIdentifiers  ← [{ type: \"PHONE\" | \"EMAIL\", value }]\n                       Every verified identifier on this account.\n                       📌 Past orders are matched ONLY against these values.\n                       An unverified email is never used for matching.\n\ncreatedAt            ← Customer.createdAt, as ISO 8601\n\n────────────────────────────────\nWHAT THE APP SHOULD DO\n────────────────────────────────\nWhen `emailVerified` is `false`, show \"Verify your email to see older\norders\" and start the flow in the `Identity linking` folder.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing, malformed or expired accessToken"
           }
         },
         {
-          "name": "4. Update profile (screen 05)",
+          "name": "4. Update profile (registration screen)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -127,7 +137,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "me"]
             },
-            "description": "Registration screen. Login pachhi `isNewUser: true` aave tyare j app aa screen dekhaade.\n\n⚠️ Ahiya no email VERIFIED NATHI — fakt contact mate save thay chhe (`contactEmail`). Profile ma `emailVerified: false` j rahese.\n\nJuna orders sathe match karva mate user e e email `Identity linking` folder na endpoints thi verify karvo padse."
+            "description": "The registration screen. Show it only when `2. Verify OTP` returned\n`isNewUser: true`.\n\n────────────────────────────────\nBODY — all three fields are OPTIONAL (partial update)\n────────────────────────────────\n\nfirstName    Max 80 characters. Omit it and the stored value is unchanged.\nlastName     Max 80 characters. Omit it and the stored value is unchanged.\n\nemail        ⚠️ THIS EMAIL IS NOT VERIFIED.\n             It is stored in the `contactEmail` column, for contact purposes\n             only. The profile will still report `emailVerified: false`, and\n             THIS EMAIL IS NEVER USED TO MATCH PAST ORDERS.\n\n             Why: anyone could type somebody else's address here. If we\n             treated it as verified, they would be shown that person's order\n             history. Verifying it requires the OTP flow in the\n             `Identity linking` folder.\n\n             Must be a valid email address, max 255 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe updated profile, in exactly the same shape as `3. Me`:\n\nid                   ← our Customer.id (UUID)\nphone                ← Customer.primaryPhone\nemail                ← primaryEmail if verified, else contactEmail —\n                       so this reflects what you just sent\nemailVerified        ← STILL `false` after this call, by design\nphoneVerified        ← whether a verified PHONE identity exists\nfirstName            ← what you just sent, or the previous value\nlastName             ← what you just sent, or the previous value\nhasPassword          ← always false in Phase 1\nverifiedIdentifiers  ← unchanged by this call\ncreatedAt            ← Customer.createdAt\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — invalid email, a field over its length limit, or an unknown field\n      (unknown properties are rejected, not silently dropped)\n401 — missing or expired accessToken"
           }
         },
         {
@@ -139,6 +149,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
+                  "",
+                  "// Both tokens are replaced on every refresh — store the new pair.",
                   "if (res.accessToken) {",
                   "  pm.collectionVariables.set('accessToken', res.accessToken);",
                   "  pm.collectionVariables.set('refreshToken', res.refreshToken);",
@@ -160,11 +172,11 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "token", "refresh"]
             },
-            "description": "Har refresh e juno token revoke thay ane navo bane chhe (rotation).\n\nJo koi juno token fari vapre, to e chori no signal chhe — tyare aakhi family revoke thai jaay chhe ane fari login karvu pade."
+            "description": "Exchanges a refresh token for a fresh pair of tokens.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nrefreshToken   The MOST RECENT refresh token. The test scripts keep\n               `{{refreshToken}}` up to date for you.\n               Required, max 512 characters.\n\ndeviceId       Optional, but send THE SAME value used at login so the\n               session stays attached to the same device.\n               Max 128 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\naccessToken    ← a NEW JWT (JWT_ACCESS_TTL, default 900s)\nrefreshToken   ← a NEW refresh token. The one you just sent is revoked\n                 at that very moment.\nexpiresIn      ← remaining lifetime of accessToken, in seconds\ntokenType      ← always \"Bearer\"\n\n────────────────────────────────\n📌 ROTATION — WORTH UNDERSTANDING\n────────────────────────────────\nEvery refresh destroys the old token and issues a new one.\n\nIf a token that has ALREADY BEEN USED shows up again, there is only one\nreasonable explanation: it was stolen. When that happens the entire token\nfamily for that user is revoked and they must log in again.\n\nSo the app must always persist the LATEST refresh token. An old copy left\nlying around in storage will log the user out if it is ever replayed.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — unknown, expired, or already-used refresh token\n      (an already-used one also revokes the whole family)"
           }
         },
         {
-          "name": "6. Logout (aa device)",
+          "name": "6. Logout (this device)",
           "request": {
             "method": "POST",
             "header": [
@@ -179,7 +191,8 @@
               "raw": "{{baseUrl}}/auth/logout",
               "host": ["{{baseUrl}}"],
               "path": ["auth", "logout"]
-            }
+            },
+            "description": "Ends the session on this device only.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nrefreshToken   OPTIONAL, max 512 characters.\n               When supplied, that specific token is revoked, which ends\n               this device's session.\n               When omitted nothing is revoked server-side — you still get\n               a 200, but the session remains alive.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsuccess   ← always `true`, whether or not a token was supplied\n\n────────────────────────────────\n⚠️ THE APP MUST ALSO DO THIS\n────────────────────────────────\nThe accessToken is a JWT, which means it is STATELESS. After logout it stays\nvalid until it expires on its own (JWT_ACCESS_TTL, default 15 minutes) —\nthe server cannot recall it.\n\nSo on logout the app MUST delete both tokens from local storage. Calling\nthis endpoint alone is not enough.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
         },
         {
@@ -192,17 +205,17 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "logout-all"]
             },
-            "description": "Badha devices par thi logout."
+            "description": "Ends every session on every device. No body — the user is identified from\nthe accessToken.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsessionsRevoked   ← how many refresh tokens were revoked, which is the\n                    number of devices that were signed in.\n                    The app can show \"Signed out of 3 devices\".\n                    `0` simply means there were no other live sessions.\n\n────────────────────────────────\nWHEN TO USE IT\n────────────────────────────────\nThe \"Log out of all devices\" button, and after any security-sensitive\nchange such as a phone number update.\n\n⚠️ Like `6. Logout`, this only revokes REFRESH tokens. Access tokens on\nother devices keep working until they expire on their own — at most\nJWT_ACCESS_TTL (default 15 minutes).\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
         }
       ]
     },
     {
       "name": "Identity linking",
-      "description": "\"Juna orders nathi dekhata?\" flow.\n\nUser e phone thi login karyu, pan website par na juna orders guest checkout ma ALAG email thi hata. E email ahiya verify kare etle e orders ena account sathe jodai jaay chhe.\n\nSecurity: fakt VERIFIED identifier par j match thay chhe — nahi to bija na orders leak thai jaay.",
+      "description": "The \"I can't see my old orders\" flow.\n\nThe user signed in with their phone, but their older website orders were\nplaced as a guest under a DIFFERENT email address. Verifying that email here\nattaches those orders to their account.\n\nSecurity: linking only ever happens against a VERIFIED identifier —\notherwise anyone could claim someone else's order history.",
       "item": [
         {
-          "name": "1. Request OTP for other email/phone",
+          "name": "1. Request OTP for another email/phone",
           "event": [
             {
               "listen": "test",
@@ -210,6 +223,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
+                  "",
+                  "// Stored in a SEPARATE variable from the login OTP, so the two",
+                  "// flows cannot overwrite each other's codes.",
                   "if (res.devCode) {",
                   "  pm.collectionVariables.set('linkDevCode', res.devCode);",
                   "  console.log('Link OTP saved:', res.devCode);",
@@ -232,7 +248,8 @@
               "raw": "{{baseUrl}}/auth/identities/request-otp",
               "host": ["{{baseUrl}}"],
               "path": ["auth", "identities", "request-otp"]
-            }
+            },
+            "description": "Sends an OTP to an ADDITIONAL email or phone that an already signed-in user\nwants to prove they own. Requires the Authorization header.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   The email or phone number to verify, held in\n             `{{linkIdentifier}}`.\n             ⚠️ This is normally DIFFERENT from the identifier they logged\n             in with — typically the email used for guest checkout on the\n             website.\n             Required, max 255 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsent                ← always `true`, for the same enumeration-safety reason\n                      as `Auth / 1. Request OTP`\nsentTo              ← the destination, masked: \"o***@example.com\"\nexpiresAt           ← now + OTP_TTL_SECONDS (default 300s), ISO 8601\nresendAfterSeconds  ← OTP_RESEND_COOLDOWN_SECONDS (default 60)\ndevCode             ← only when OTP_EXPOSE_IN_RESPONSE=true; the test script\n                      saves it to `{{linkDevCode}}`\n\n────────────────────────────────\nRATE LIMITS\n────────────────────────────────\n10 requests/min per IP at the route level, plus the same per-identifier and\nper-IP OTP limits described in `Auth / 1. Request OTP`.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken\n429 — any OTP rate limit exceeded"
           }
         },
         {
@@ -252,14 +269,14 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "identities", "verify"]
             },
-            "description": "Verify safal thay etle j — ane tya sudhi nahi — aa identifier na Shopify records jodaay chhe.\n\nResponse ma `linkedShopifyRecords` batave chhe ke ketla juna records jodaaya."
+            "description": "Once verification succeeds — and not before — the old Shopify records\nbelonging to that identifier are attached to the user's account.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to\n             `1. Request OTP for another email/phone`.\n             Required, max 255 characters.\n\ncode         The one-time password, filled in from `{{linkDevCode}}`.\n             4-8 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records this\n                        verification attached. `0` is a perfectly normal\n                        result — it just means Shopify has no record under\n                        that email.\n\ncustomer              ← the updated profile, same shape as `Auth / 3. Me`.\n                        The newly verified identifier now appears in\n                        `verifiedIdentifiers`, and for an email\n                        `emailVerified` flips to `true`.\n\n────────────────────────────────\n🔒 WHY THERE IS AN EXTRA OWNERSHIP CHECK\n────────────────────────────────\nThe server verifies that the OTP was issued to the SAME user who is now\npresenting it. Without that check an attacker could request an OTP for\ntheir own address, then submit it using ANOTHER user's accessToken — and\nquietly attach their email to that person's account.\n\nThis is also why linking only works against verified identifiers. The\nunverified email from `Auth / 4. Update profile` is never used for order\nmatching.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong or expired code, OR the OTP was issued to a different user\n429 — 20 requests/min per IP exceeded"
           }
         }
       ]
     },
     {
       "name": "Addresses",
-      "description": "Badha endpoints par login jaruri chhe.\n\nAddresses aapda Postgres ma chhe, Shopify ma nahi — etle migration vakhte addresses sathe aavse, Shopify par pacha javu nahi pade.",
+      "description": "Every endpoint here requires authentication.\n\nAddresses live in OUR Postgres database, not in Shopify — so they come with\nus during the migration and we never have to reach back to Shopify for\nthem.",
       "item": [
         {
           "name": "1. List",
@@ -271,7 +288,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["addresses"]
             },
-            "description": "Default address hammesha sauthi upar aave chhe."
+            "description": "All of the user's saved addresses. The default one always comes first.\n\nThe response is a plain ARRAY — there is no pagination, because nobody has\nhundreds of addresses.\n\n────────────────────────────────\nRESPONSE — where each key of an item comes from\n────────────────────────────────\n\nid            ← our Address.id (UUID). Never a Shopify id.\n                This is the value used as `{{addressId}}` in update and\n                delete below.\n\nfirstName     ← Address.firstName   (may be null)\nlastName      ← Address.lastName    (may be null)\nphone         ← Address.phone       (may be null)\n\nline1         ← Address.line1       (always present)\nline2         ← Address.line2       (may be null)\ncity          ← Address.city        (always present)\nprovince      ← Address.province    (may be null)\nzip           ← Address.zip         (always present)\ncountry       ← Address.country     (always present)\ncountryCode   ← Address.countryCode (ISO 2-letter, may be null)\n\nisDefault     ← Address.isDefault\n                Exactly one address has this set to `true`.\n\nimported      ← computed as Address.importedFromOrder !== null\n                `true`  = pulled automatically from a past order\n                          (see `5. Import from past orders`)\n                `false` = the user added it themselves\n                The app can use this to show a \"from your past order\" badge.\n\n📌 `provinceCode` exists in the database but is deliberately NOT returned —\nthe app has no use for it. Add it to the address mapper if that changes.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
         },
         {
@@ -283,6 +300,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
+                  "",
+                  "// Save the id so update / set-default / delete can target it.",
                   "if (res.id) {",
                   "  pm.collectionVariables.set('addressId', res.id);",
                   "  console.log('addressId saved:', res.id);",
@@ -306,7 +325,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["addresses"]
             },
-            "description": "Pehlo address apne-aap default bane chhe.\n\nDedupe: e j address fari moklo (bhale alag casing/spacing ma) to navo NATHI banto — ejj update thay chhe. \"A-101, Shanti Nagar\" ane \"a 101 shanti nagar\" ek j ganay chhe."
+            "description": "Saves a new address for the signed-in user.\n\n────────────────────────────────\nBODY — which fields are required\n────────────────────────────────\n\nREQUIRED:\n  line1          3-200 characters\n  city           2-100 characters\n  zip            3-20 characters\n  country        2-100 characters (full name, e.g. \"India\")\n\nOPTIONAL:\n  firstName      max 80\n  lastName       max 80\n  phone          max 30\n  line2          max 200\n  province       max 100 (e.g. \"Gujarat\")\n  provinceCode   max 10  (e.g. \"GJ\") — stored, but not returned\n  countryCode    EXACTLY 2 characters, ISO (e.g. \"IN\")\n  isDefault      boolean — see the rule below\n\n⚠️ Unknown fields are REJECTED, not ignored. Sending anything outside this\nlist returns 400 with \"property X should not exist\".\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe address that was created, in the same shape as `1. List`:\n\nid            ← the newly generated Address.id (UUID); the test script\n                saves it to `{{addressId}}`\nfirstName     ← what you sent, or null\nlastName      ← what you sent, or null\nphone         ← what you sent, or null\nline1         ← what you sent\nline2         ← what you sent, or null\ncity          ← what you sent\nprovince      ← what you sent, or null\nzip           ← what you sent\ncountry       ← what you sent\ncountryCode   ← what you sent, or null\nisDefault     ← `true` if this is the first address, or if you asked for it\nimported      ← always `false` here — you added it by hand\n\n────────────────────────────────\nTWO BEHAVIOURS WORTH KNOWING\n────────────────────────────────\n\n1. THE FIRST address automatically becomes the default, even if you did not\n   send `isDefault`.\n\n2. DEDUPLICATION — sending the same address again does NOT create a\n   duplicate; the existing row is updated instead. The fingerprint is built\n   from line1 + line2 + city + zip + country, with case, spacing and\n   punctuation stripped:\n\n     \"A-101, Shanti Nagar\"   and   \"a 101 shanti nagar\"   →   THE SAME\n\n   Why it matters: one address typically appears across many past orders.\n   Without deduplication the import feature would show the user the same\n   address fifteen times, turning a convenience into a nuisance.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — a required field is missing, a length rule was broken, or an unknown\n      field was included\n401 — missing or expired accessToken"
           }
         },
         {
@@ -326,7 +345,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["addresses", "{{addressId}}"]
             },
-            "description": "Partial update — je fields moklya nathi e ejj rahe chhe."
+            "description": "Partial update — any field you DO NOT send keeps its current value.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   `{{addressId}}`, saved automatically by `2. Create`.\n      Must be a valid UUID or the request fails with 400 before it ever\n      reaches the database.\n\n────────────────────────────────\nBODY — every field is optional\n────────────────────────────────\n\nSame fields and the same limits as `2. Create`, except that line1, city,\nzip and country are optional here too:\n\n  firstName      max 80\n  lastName       max 80\n  phone          max 30\n  line1          3-200\n  line2          max 200\n  city           2-100\n  province       max 100\n  provinceCode   max 10\n  zip            3-20\n  country        2-100\n  countryCode    exactly 2\n  isDefault      boolean — sending `true` promotes this address and demotes\n                 the previous default, exactly like `4. Set default`\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe updated address, same shape as `1. List`:\n\nid            ← unchanged Address.id\nfirstName     ← new value if sent, otherwise the stored one\nlastName      ← new value if sent, otherwise the stored one\nphone         ← new value if sent, otherwise the stored one\nline1         ← new value if sent, otherwise the stored one\nline2         ← new value if sent, otherwise the stored one\ncity          ← new value if sent, otherwise the stored one\nprovince      ← new value if sent, otherwise the stored one\nzip           ← new value if sent, otherwise the stored one\ncountry       ← new value if sent, otherwise the stored one\ncountryCode   ← new value if sent, otherwise the stored one\nisDefault     ← Address.isDefault after the update\nimported      ← Address.importedFromOrder !== null (editing an imported\n                address does not clear this flag)\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — :id is not a UUID, or a field broke a length rule\n401 — missing or expired accessToken\n404 — no such address, OR it belongs to a different user.\n      🔒 Both cases return the same 404 on purpose. Distinguishing them\n      would let someone probe ids to discover which addresses exist."
           }
         },
         {
@@ -339,7 +358,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["addresses", "{{addressId}}", "default"]
             },
-            "description": "Ek j address default rahe chhe — juno apne-aap hati jaay chhe."
+            "description": "Promotes one address to be the default. No body is sent.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   `{{addressId}}` — must be a valid UUID.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsuccess   ← always `true` when the address was found and updated\n\n📌 The updated address is NOT returned. The app should either re-fetch\n`1. List` or flip the flag in its local state itself.\n\n────────────────────────────────\nBEHAVIOUR\n────────────────────────────────\nOnly one address is ever the default — the previous one is demoted in the\nsame operation, so there is never a moment with two defaults.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — :id is not a UUID\n401 — missing or expired accessToken\n404 — no such address, or it belongs to a different user"
           }
         },
         {
@@ -352,7 +371,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["addresses", "import-from-orders"]
             },
-            "description": "\"Fetch my shipping addresses based on past order\" checkbox nu endpoint.\n\nApp ne aa login PACHHI call karvanu (verify na response ma nahi) — jethi Shopify dhimu hoy to pan login atke nahi.\n\nFAKT verified phone/email na orders jovaay chhe. Ek j address 15 orders ma hoy to pan ek j vaar save thay chhe.\n\n⚠️ `read_all_orders` scope vagar Shopify fakt CHHELLA 60 DIVAS na orders aape chhe. Response ma `limitedToRecentOrders: true` aa j batave chhe. Juna grahak na varso juna orders e scope approve thay pachhi j malse."
+            "description": "The endpoint behind the \"Fetch my shipping addresses based on past orders\"\ncheckbox. No body — the user is identified from the accessToken.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nimported              ← how many NEW addresses were saved, after\n                        deduplication\n\nfound                 ← how many UNIQUE addresses were discovered across\n                        the past orders.\n                        📌 `found` being larger than `imported` is normal,\n                        not an error — the difference was already saved.\n                        `found: 0` means no orders were located for the\n                        user's verified identifiers.\n\nlimitedToRecentOrders ← CURRENTLY ALWAYS `true`.\n                        Without the `read_all_orders` scope, Shopify only\n                        returns orders from the LAST 60 DAYS.\n                        The app can use this flag to explain why a\n                        long-standing customer's older orders did not show\n                        up. Once that scope is approved by Shopify this can\n                        become `false`.\n\n────────────────────────────────\nWHEN TO CALL IT\n────────────────────────────────\nThe app should call this AFTER login, as its own request — never by waiting\non the `2. Verify OTP` response. Otherwise a slow Shopify makes login itself\nfeel slow.\n\nThe server already runs this once automatically during OTP verification.\nThis endpoint exists for MANUAL RE-RUNS — for example after the user later\nverifies an additional email through `Identity linking` and now wants the\naddresses from those older orders.\n\n────────────────────────────────\n🔒 VERIFIED IDENTIFIERS ONLY\n────────────────────────────────\nOrders are looked up ONLY by the phone numbers and emails listed in\n`verifiedIdentifiers` on `Auth / 3. Me`. The unverified email from the\nregistration screen is deliberately ignored — otherwise anyone could type a\nstranger's email and harvest their delivery addresses.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
         },
         {
@@ -365,13 +384,14 @@
               "host": ["{{baseUrl}}"],
               "path": ["addresses", "{{addressId}}"]
             },
-            "description": "Default address delete karo to bijo koi apne-aap default banii jaay chhe."
+            "description": "Removes an address. No body is sent.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   `{{addressId}}` — must be a valid UUID.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsuccess   ← always `true` when the address was found and removed\n\n────────────────────────────────\nBEHAVIOUR\n────────────────────────────────\nDeleting the DEFAULT address automatically promotes another one, so the user\nis never left in a state with no default. Deleting the last remaining\naddress simply leaves them with none, which is fine.\n\nThis is a hard delete, not a soft delete. Past orders are unaffected,\nbecause an order stores its own COPY of the address at the time it was\nplaced.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — :id is not a UUID\n401 — missing or expired accessToken\n404 — no such address, or it belongs to a different user"
           }
         }
       ]
     },
     {
       "name": "Products",
+      "description": "Public — browsing does not require authentication. (Cart and orders will\nrequire it.)\n\nIDENTIFIERS: products are addressed by their HANDLE (slug) everywhere.\nShopify's numeric ids never leave the server.\n\nWHERE THE MAPPING LIVES: src/shopify/mappers/product.mapper.ts",
       "item": [
         {
           "name": "List",
@@ -382,10 +402,14 @@
                 "type": "text/javascript",
                 "exec": [
                   "const res = pm.response.json();",
+                  "",
+                  "// Save the cursor for the 'List — next page' request.",
                   "if (res.nextCursor) {",
                   "  pm.collectionVariables.set('nextCursor', res.nextCursor);",
                   "}",
-                  "pm.test('Shopify shapes leak nathi', () => {",
+                  "",
+                  "// The whole point of the mapper layer: no Shopify shapes escape.",
+                  "pm.test('no Shopify shapes leak through', () => {",
                   "  pm.expect(pm.response.text()).to.not.include('gid://');",
                   "});"
                 ]
@@ -400,25 +424,30 @@
               "host": ["{{baseUrl}}"],
               "path": ["products"],
               "query": [
-                { "key": "limit", "value": "20", "description": "1-50" },
+                { "key": "limit", "value": "20", "description": "1-50, default 20" },
                 {
                   "key": "sort",
                   "value": "newest",
-                  "description": "newest | oldest | title | updated | relevance"
+                  "description": "newest | oldest | title | updated | relevance. Default newest."
                 },
-                { "key": "search", "value": "paithani", "disabled": true },
+                {
+                  "key": "search",
+                  "value": "paithani",
+                  "description": "Full-text across title, tags, vendor and product type",
+                  "disabled": true
+                },
                 { "key": "tag", "value": "Silk Dupattas", "disabled": true },
                 { "key": "type", "value": "Dupatta", "disabled": true },
                 { "key": "vendor", "value": "Look & Book", "disabled": true },
                 {
                   "key": "cursor",
                   "value": "{{nextCursor}}",
-                  "description": "Aagli page — apne-aap save thay chhe",
+                  "description": "Next page — saved automatically by the test script",
                   "disabled": true
                 }
               ]
             },
-            "description": "Cursor-based pagination (page numbers nahi).\n\nNote: price sort nathi — Shopify na Admin API ma products connection par price no sort key j nathi. Phase 2 ma Postgres thi aavse."
+            "description": "A page of products. Public — no authentication needed.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nitems[].id             ← Product.handle (the slug)\n                         ⚠️ A HANDLE, never Shopify's numeric id.\n                         Why: the handle is our own data. In Phase 2 it\n                         becomes the unique column in our products table, so\n                         saved links and deep links keep working. Shopify's\n                         numeric ids never leave the server.\n\nitems[].title          ← Product.title\nitems[].vendor         ← Product.vendor       (may be null)\nitems[].productType    ← Product.productType  (may be null)\nitems[].tags           ← Product.tags         (may be an empty array)\n\nitems[].price          ← priceRangeV2.minVariantPrice\n                         The CHEAPEST variant's price, which is what a card\n                         should show.\n                         ⚠️ Shopify returns \"1299.0\"; we normalise it to\n                         \"1299.00\" using the currency's own decimal count\n                         (INR/USD = 2, JPY = 0 — not hard-coded).\n                         `amount` is a STRING, never a float, so no precision\n                         is lost.\n\nitems[].compareAtPrice ← compareAtPriceRange.maxVariantCompareAtPrice\n                         The struck-through price. Returned ONLY when it is\n                         genuinely higher than the current price — Shopify\n                         stores often leave stale compare-at values behind,\n                         which would otherwise render as a pointless\n                         \"₹499 ~~₹499~~\".\n                         `null` when there is no discount.\n\nitems[].priceVaries    ← computed as minVariantPrice !== maxVariantPrice\n                         When `true` the app can display \"from ₹899\".\n\nitems[].image.url      ← featuredMedia.image.url\nitems[].image.alt      ← featuredMedia.alt — Shopify's empty string \"\"\n                         becomes `null`, because \"has no alt text\" and \"has\n                         empty alt text\" mean the same thing to the app\nitems[].image.width    ← featuredMedia.image.width\nitems[].image.height   ← featuredMedia.image.height\n                         The whole `image` object is `null` when the product\n                         has no media at all.\n\nitems[].inStock        ← if tracksInventory is false → ALWAYS true\n                         otherwise → totalInventory > 0\n                         ⚠️ Made-to-order products do not track inventory and\n                         report totalInventory 0, so reading that field alone\n                         would mark every one of them \"Out of stock\".\n                         The exact stock count is deliberately not exposed.\n\nnextCursor             ← products.pageInfo.endCursor, or `null` when\n                         hasNextPage is false\nhasNextPage            ← products.pageInfo.hasNextPage\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nAll optional. The server ALWAYS applies `status:ACTIVE`, so draft and\narchived products never reach the app.\n\nlimit    1-50, default 20\nsort     newest | oldest | title | updated | relevance (default newest)\nsearch   max 120 characters\ntag      max 120 characters\ntype     max 120 characters — matches Shopify's product_type\nvendor   max 120 characters\ncursor   max 512 characters — see `List — next page`\n\n🔒 search / tag / type / vendor are quoted and escaped server-side before\nreaching Shopify's search syntax, so a value like `' OR status:DRAFT`\ncannot break out and expose draft products.\n\n────────────────────────────────\n⚠️ THERE IS NO PRICE SORT HERE\n────────────────────────────────\nShopify's Admin API simply has no price sort key on the `products`\nconnection. It does have one on `Collection.products`, which is why:\n\n  /products?sort=price_asc                    ❌ 400\n  /collections/:id/products?sort=price_asc    ✅ works\n\nSo \"Price: low to high\" can only be offered on category pages for now. It\nwill arrive here in Phase 2, once products are served from Postgres.\n\n────────────────────────────────\nCACHE / ERRORS\n────────────────────────────────\nCached in Redis for PRODUCT_LIST_CACHE_TTL (default 300s).\n\n400 — limit out of range, unknown sort value, or a parameter over its\n      length limit\n503 — Shopify is unreachable after the client's internal retries"
           }
         },
         {
@@ -433,10 +462,14 @@
               "query": [
                 { "key": "limit", "value": "20" },
                 { "key": "sort", "value": "newest" },
-                { "key": "cursor", "value": "{{nextCursor}}" }
+                {
+                  "key": "cursor",
+                  "value": "{{nextCursor}}",
+                  "description": "Taken from the previous response's nextCursor"
+                }
               ]
             },
-            "description": "Pehla `List` chalavo — nextCursor apne-aap save thai jashe."
+            "description": "Run `List` first — `{{nextCursor}}` is populated automatically.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\ncursor   ← the `nextCursor` from the previous response, sent back AS-IS.\n           It is an opaque base64 string from Shopify. The app must never\n           decode or parse it — only store it and hand it back.\n           Max 512 characters.\n\n⚠️ Send THE SAME sort and filters that produced the cursor. Changing them\nmid-pagination makes Shopify return wrong results or an error.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\nIdentical in shape to `List`; every key is documented there.\n\nPagination is finished when `hasNextPage` is `false` and `nextCursor` is\n`null`.\n\n────────────────────────────────\nWHY CURSORS INSTEAD OF PAGE NUMBERS\n────────────────────────────────\nWith page numbers, a product added while the user is browsing shifts every\nsubsequent item along — so one product gets shown twice and another is\nnever shown at all. Cursors do not suffer from that.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — cursor longer than 512 characters\n503 — Shopify unreachable"
           }
         },
         {
@@ -450,9 +483,14 @@
               "path": ["products"],
               "query": [
                 { "key": "limit", "value": "10" },
-                { "key": "search", "value": "paithani" }
+                {
+                  "key": "search",
+                  "value": "paithani",
+                  "description": "Full-text across title, tags, vendor and product type"
+                }
               ]
-            }
+            },
+            "description": "The same endpoint as `List`, just with `search` supplied. The response shape\nis identical.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nsearch   ← passed to Shopify's product search, which covers title, tags,\n           vendor and product type. Max 120 characters.\n\n🔒 The value is quoted and escaped on the server, so something like\n`' OR status:DRAFT` cannot break out of the query and expose draft products.\n\n📌 `sort` defaults to `newest`. For searches, `sort=relevance` usually gives\nbetter results, because Shopify then applies its own relevance ranking\ninstead of ordering by creation date.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\nIdentical in shape to `List`; every key is documented there.\n\nNo matches returns `{ items: [], nextCursor: null, hasNextPage: false }`\nwith status 200 — NOT a 404. \"Nothing found\" is not an error.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — search longer than 120 characters, or limit out of range\n503 — Shopify unreachable"
           }
         },
         {
@@ -465,7 +503,195 @@
               "host": ["{{baseUrl}}"],
               "path": ["products", "{{productHandle}}"]
             },
-            "description": "`:id` = product no handle/slug.\n\nShopify na numeric ids app sudhi kyarey nathi jata — handle aapdo potano data chhe ane Phase 2 ma pan e j rahese."
+            "description": "A single product, with its images, options and variants.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   the product HANDLE / slug, e.g.\n      `peach-traditional-paithani-dupatta`.\n      Shopify's numeric ids never reach the app.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nEverything `List` returns (id, title, vendor, productType, tags, price,\ncompareAtPrice, priceVaries, image, inStock — all documented there), plus:\n\ndescription    ← Product.description\n                 PLAIN TEXT, not HTML.\n\nimages[]       ← every MediaImage from media(first: 15)\n                 If the product has no media list, the single featured image\n                 is used instead — so this array is only ever empty when the\n                 product has no image at all.\n                 Each entry has url, alt, width, height, mapped exactly like\n                 `image` in `List`.\n\noptions[]      ← { name, values[] }\n                 ⚠️ DERIVED FROM THE VARIANTS, not from Product.options.\n                 Two benefits: one fewer GraphQL field to pay for, and\n                 options that have no actual variant behind them never reach\n                 the app.\n                 📌 An EMPTY array means a single-variant product. The app\n                 should then hide the variant selector and show \"Add to\n                 Cart\" directly.\n                 (Shopify invents a fake \"Title: Default Title\" option for\n                 such products; it is stripped on the server.)\n\nvariants[].id  ← the variant's numeric id, with the gid:// prefix removed.\n                 ⚠️ TREAT THIS AS AN OPAQUE TOKEN. The app only ever hands\n                 it back to us (add to cart) and must never parse it. In\n                 Phase 2 its contents may change entirely without the app\n                 noticing, because the cart will live in our own Postgres.\n\nvariants[].title            ← ProductVariant.title, or `null` when it is\n                              \"Default Title\" — that is Shopify's internal\n                              placeholder, not a real name\nvariants[].sku              ← ProductVariant.sku (may be null)\nvariants[].price            ← ProductVariant.price, normalised the same way\n                              as the list price\nvariants[].compareAtPrice   ← only when higher than this variant's price,\n                              otherwise null\nvariants[].inStock          ← ProductVariant.availableForSale\n                              📌 This is per-variant and differs from the\n                              product-level flag: the product can be in\n                              stock while this particular size is sold out.\nvariants[].selectedOptions  ← [{ name, value }], with the \"Default Title\"\n                              placeholder removed\n\nupdatedAt      ← Product.updatedAt, ISO 8601\n\n────────────────────────────────\nWHY THIS QUERY IS HEAVIER\n────────────────────────────────\nVariants (up to 100) and media are requested ONLY here, never in the list\nqueries. Asking for every product's variants in a list would exhaust\nShopify's cost bucket in a single request.\n\n────────────────────────────────\nCACHE / ERRORS\n────────────────────────────────\nCached in Redis for PRODUCT_DETAIL_CACHE_TTL (default 180s).\n\n404 — unknown handle, OR the product is DRAFT or ARCHIVED.\n      Draft products are visible in the Shopify admin but must never appear\n      in the app; the Admin API returns them, so we filter them out.\n503 — Shopify unreachable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Collections",
+      "description": "The home page's category row, its \"See all\" page, and category pages.\n\nPublic — no authentication needed.\n\nIDENTIFIERS: collections are addressed by their HANDLE (slug) everywhere,\nnever by Shopify's numeric id — the same rule as products. If the source\nmoves to Postgres in Phase 2, saved links keep working.\n\nWHERE THE MAPPING LIVES: src/shopify/mappers/collection.mapper.ts",
+      "item": [
+        {
+          "name": "1. List (category row)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "// Save the cursor for the 'List — next page' request.",
+                  "if (res.nextCursor) {",
+                  "  pm.collectionVariables.set('collectionCursor', res.nextCursor);",
+                  "}",
+                  "",
+                  "// Pick a collection that actually has products in it — saving an",
+                  "// empty one would make the 'Products' request return zero items.",
+                  "const withProducts = (res.items || []).find((c) => (c.productCount || 0) > 0);",
+                  "if (withProducts) {",
+                  "  pm.collectionVariables.set('collectionHandle', withProducts.id);",
+                  "  console.log('collectionHandle saved:', withProducts.id, '(' + withProducts.productCount + ' products)');",
+                  "}",
+                  "",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('no Shopify shapes leak through', () => {",
+                  "  pm.expect(pm.response.text()).to.not.include('gid://');",
+                  "});",
+                  "pm.test('id is a handle, not a numeric id', () => {",
+                  "  for (const c of res.items || []) pm.expect(c.id).to.not.match(/^\\d+$/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/collections?limit=8&sort=title",
+              "host": ["{{baseUrl}}"],
+              "path": ["collections"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "8",
+                  "description": "1-50. Use 8 for the home row, 20+ for the See all page."
+                },
+                {
+                  "key": "sort",
+                  "value": "title",
+                  "description": "title | updated | relevance. Default title."
+                },
+                {
+                  "key": "search",
+                  "value": "dupatta",
+                  "description": "Passed to Shopify's collection search; quoted and escaped server-side",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{collectionCursor}}",
+                  "description": "Next page — saved automatically by the test script",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Powers both the home page's category row and its \"See all\" page — the same\nendpoint, only `limit` differs.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nitems[].id            ← Collection.handle\n                        ⚠️ A HANDLE, not a numeric id. This is the value to\n                        pass as `:id` to the other two requests.\n\nitems[].title         ← Collection.title\n\nitems[].image.url     ← Collection.image.url\nitems[].image.alt     ← Collection.image.altText — Shopify's empty string\n                        \"\" becomes `null`, the same rule used for products\nitems[].image.width   ← Collection.image.width\nitems[].image.height  ← Collection.image.height\n                        The whole `image` object is `null` when no image has\n                        been set on the collection in Shopify, and the app\n                        should fall back to a placeholder.\n\nitems[].productCount  ← Collection.productsCount.count\n                        ⚠️ THIS NUMBER COMES FROM SHOPIFY AND INCLUDES DRAFT\n                        AND ARCHIVED PRODUCTS, whereas\n                        `/collections/:id/products` returns only ACTIVE ones.\n                        Fine for a \"13 products\" heading; do NOT use it to\n                        reason about pagination.\n\nitems[].updatedAt     ← Collection.updatedAt, ISO 8601\n\nnextCursor            ← collections.pageInfo.endCursor, or `null` when\n                        hasNextPage is false — so the app only has to check\n                        `nextCursor !== null`\nhasNextPage           ← collections.pageInfo.hasNextPage\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nlimit    1-50, default 20\nsort     title | updated | relevance, default `title`\n         📌 Default is `title` here, unlike products where it is `newest`.\n         A category row should keep a stable order; with `updated`, editing\n         an old category would suddenly jump it to the front.\nsearch   max 120 characters, quoted and escaped server-side\ncursor   max 512 characters\n\n────────────────────────────────\nCACHE / ERRORS\n────────────────────────────────\nCached in Redis for COLLECTION_LIST_CACHE_TTL (default 600s) — longer than\nproducts, because collections change far less often.\n\n400 — limit out of range or unknown sort value\n503 — Shopify unreachable"
+          }
+        },
+        {
+          "name": "2. List — next page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/collections?limit=8&sort=title&cursor={{collectionCursor}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["collections"],
+              "query": [
+                { "key": "limit", "value": "8" },
+                { "key": "sort", "value": "title" },
+                {
+                  "key": "cursor",
+                  "value": "{{collectionCursor}}",
+                  "description": "Taken from the previous response's nextCursor"
+                }
+              ]
+            },
+            "description": "Run `1. List` first — `{{collectionCursor}}` is populated automatically.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\ncursor   ← the `nextCursor` from the previous response, sent back AS-IS.\n           An opaque Shopify string — store it and hand it back, never\n           decode it. Max 512 characters.\n\n⚠️ Keep `sort` and any filters identical to the request that produced the\ncursor, or Shopify returns wrong results.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nSame shape as `1. List`:\n\nitems[].id            ← Collection.handle\nitems[].title         ← Collection.title\nitems[].image         ← Collection.image (url / altText / width / height),\n                        or null\nitems[].productCount  ← Collection.productsCount.count (includes drafts)\nitems[].updatedAt     ← Collection.updatedAt\nnextCursor            ← collections.pageInfo.endCursor, null when finished\nhasNextPage           ← collections.pageInfo.hasNextPage\n\nPagination is finished when `hasNextPage` is `false`.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — cursor longer than 512 characters\n503 — Shopify unreachable"
+          }
+        },
+        {
+          "name": "3. Detail (category page header)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/collections/{{collectionHandle}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["collections", "{{collectionHandle}}"]
+            },
+            "description": "The header of a category page. Products are a SEPARATE endpoint, so that\nfetching just the header does not pay the cost of a full product list.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   the collection handle, e.g. `dupattas`.\n      `{{collectionHandle}}` is saved automatically by `1. List`.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid            ← Collection.handle (a handle, never a numeric id)\ntitle         ← Collection.title\n\nimage.url     ← Collection.image.url\nimage.alt     ← Collection.image.altText (\"\" becomes null)\nimage.width   ← Collection.image.width\nimage.height  ← Collection.image.height\n                The whole object is `null` when no image is set.\n\nproductCount  ← Collection.productsCount.count\n                ⚠️ Includes draft and archived products, unlike\n                `4. Products in collection`.\n\nupdatedAt     ← Collection.updatedAt, ISO 8601\n\ndescription   ← Collection.description\n                PLAIN TEXT, not HTML. Shopify's `descriptionHtml` is\n                deliberately not sent — the app should not have to embed a\n                WebView or an HTML parser to render a category header.\n                An empty description comes back as `\"\"`, never `null`.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n404 — unknown handle, or the collection does not exist in Shopify.\n      📌 An EMPTY collection is NOT a 404 — it returns 200 with\n      `productCount: 0`. The app should distinguish \"this category does not\n      exist\" from \"this category has nothing in it yet\".\n503 — Shopify unreachable"
+          }
+        },
+        {
+          "name": "4. Products in collection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "if (res.nextCursor) {",
+                  "  pm.collectionVariables.set('collectionProductCursor', res.nextCursor);",
+                  "}",
+                  "",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('no Shopify shapes leak through', () => {",
+                  "  pm.expect(pm.response.text()).to.not.include('gid://');",
+                  "});",
+                  "",
+                  "// Draft and archived products are filtered out in the repository,",
+                  "// so they must never appear here. Prices are always normalised",
+                  "// to the currency's decimal count.",
+                  "pm.test('every product has an id and a normalised price', () => {",
+                  "  for (const p of res.items || []) {",
+                  "    pm.expect(p.id).to.be.a('string');",
+                  "    pm.expect(p.price.amount).to.match(/^\\d+\\.\\d{2}$/);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/collections/{{collectionHandle}}/products?limit=20&sort=manual",
+              "host": ["{{baseUrl}}"],
+              "path": ["collections", "{{collectionHandle}}", "products"],
+              "query": [
+                { "key": "limit", "value": "20", "description": "1-50, default 20" },
+                {
+                  "key": "sort",
+                  "value": "manual",
+                  "description": "manual | bestselling | newest | title | price_asc | price_desc. Default manual."
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{collectionProductCursor}}",
+                  "description": "Next page — saved automatically by the test script",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "The product grid on a category page, and the product strip in a home page\nsection (use `limit=4`).\n\nThis returns exactly the SAME `ProductSummaryDto` shape as `/products`, so\none product card component works everywhere in the app.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   the collection handle, e.g. `dupattas`.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nitems[].id             ← Product.handle (never a numeric id)\nitems[].title          ← Product.title\nitems[].vendor         ← Product.vendor       (may be null)\nitems[].productType    ← Product.productType  (may be null)\nitems[].tags           ← Product.tags         (may be empty)\n\nitems[].price          ← priceRangeV2.minVariantPrice — the cheapest\n                         variant, which is what a card should show.\n                         ⚠️ Shopify returns \"1299.0\"; we normalise to\n                         \"1299.00\" using the currency's decimal count.\n                         `amount` is a STRING, never a float.\n\nitems[].compareAtPrice ← compareAtPriceRange.maxVariantCompareAtPrice.\n                         Returned ONLY when genuinely higher than the price —\n                         stale compare-at values would otherwise render as\n                         \"₹499 ~~₹499~~\". `null` when there is no discount.\n\nitems[].priceVaries    ← minVariantPrice !== maxVariantPrice.\n                         When `true` the app can show \"from ₹899\".\n\nitems[].image.url      ← featuredMedia.image.url\nitems[].image.alt      ← featuredMedia.alt (\"\" becomes null)\nitems[].image.width    ← featuredMedia.image.width\nitems[].image.height   ← featuredMedia.image.height\n\nitems[].inStock        ← if tracksInventory is false → ALWAYS true\n                         otherwise → totalInventory > 0\n                         ⚠️ Made-to-order products report totalInventory 0\n                         despite being purchasable, so that field cannot be\n                         read on its own.\n\nnextCursor             ← products.pageInfo.endCursor, null when finished\nhasNextPage            ← products.pageInfo.hasNextPage\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nlimit    1-50, default 20\nsort     manual | bestselling | newest | title | price_asc | price_desc\n         Default `manual` — the order the merchant arranged in Shopify.\n         That is what a home page section should show; the merchant chose it\n         deliberately and we should not override it.\ncursor   max 512 characters\n\n────────────────────────────────\n⚠️ PAGINATION — PLEASE READ\n────────────────────────────────\nShopify's `Collection.products` connection has NO `query` argument, unlike\nthe top-level `products` connection where we apply `status:ACTIVE`\nserver-side. Draft and archived products are therefore filtered out in our\nown code, after Shopify has already counted them towards the page.\n\nWhich means: ask for limit=20 and you may receive 18 items.\n\nThe app must NOT look at `items.length` to decide whether more pages exist.\nUse `hasNextPage` and `nextCursor` only. The cursor is Shopify's own, taken\nbefore our filtering, so pagination itself stays correct.\n\n────────────────────────────────\nCACHE\n────────────────────────────────\nPRODUCT_LIST_CACHE_TTL (default 300s) — deliberately the product TTL, not\nthe collection one. This is product data, and a category page should pick up\nprice and stock changes just as quickly as `/products` does.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — limit out of range or unknown sort value\n404 — the collection does not exist\n200 with `items: []` — the collection exists but has no ACTIVE products\n503 — Shopify unreachable"
+          }
+        },
+        {
+          "name": "5. Products — price sort (only available here)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/collections/{{collectionHandle}}/products?limit=20&sort=price_asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["collections", "{{collectionHandle}}", "products"],
+              "query": [
+                { "key": "limit", "value": "20" },
+                {
+                  "key": "sort",
+                  "value": "price_asc",
+                  "description": "price_asc | price_desc — not available on /products"
+                }
+              ]
+            },
+            "description": "📌 THIS IS NOT AVAILABLE ON `/products`.\n\nShopify's Admin API has no price sort key on the top-level `products`\nconnection, but it does have one on `Collection.products`. So:\n\n  /products?sort=price_asc                    ❌ 400\n  /collections/:id/products?sort=price_asc    ✅ works\n\nOffer \"Price: low to high\" on category pages only for now. On the global\nproduct list it arrives in Phase 2, once products come from Postgres.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nsort     price_asc  → cheapest first  (Shopify PRICE, ascending)\n         price_desc → dearest first   (Shopify PRICE, descending)\nlimit    1-50, default 20\ncursor   max 512 characters\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nSame shape as `4. Products in collection`:\n\nitems[].id             ← Product.handle\nitems[].title          ← Product.title\nitems[].vendor         ← Product.vendor\nitems[].productType    ← Product.productType\nitems[].tags           ← Product.tags\nitems[].price          ← priceRangeV2.minVariantPrice, normalised to the\n                         currency's decimal count\nitems[].compareAtPrice ← compareAtPriceRange.maxVariantCompareAtPrice, only\n                         when higher than the price\nitems[].priceVaries    ← minVariantPrice !== maxVariantPrice\nitems[].image          ← featuredMedia (url / alt / width / height), or null\nitems[].inStock        ← tracksInventory false → true, else totalInventory > 0\nnextCursor             ← products.pageInfo.endCursor, null when finished\nhasNextPage            ← products.pageInfo.hasNextPage\n\n⚠️ Shopify sorts by the variant price it selects internally, while the card\nshows the CHEAPEST variant. For products whose variants differ in price\n(`priceVaries: true`) the displayed order can therefore look slightly off.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — unknown sort value or limit out of range\n404 — the collection does not exist\n503 — Shopify unreachable"
           }
         }
       ]

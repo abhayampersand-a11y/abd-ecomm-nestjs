@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AddressesModule } from './addresses/addresses.module';
 import { AuthModule } from './auth/auth.module';
+import { CollectionsModule } from './collections/collections.module';
 import { validateEnv } from './config/env.schema';
 import { HealthController } from './health/health.controller';
 import { PrismaModule } from './prisma/prisma.module';
@@ -30,6 +31,7 @@ import { ShopifyModule } from './shopify/shopify.module';
     AuthModule,
     AddressesModule,
     ProductsModule,
+    CollectionsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -10,7 +10,12 @@
  * mapper ma derive thai jaay chhe. Ek field ochhu = ek risk ochho.
  */
 
-const PRODUCT_CARD_FIELDS = /* GraphQL */ `
+/**
+ * Collection na products pan aa j card shape vaapre chhe
+ * ([collection.queries.ts](./collection.queries.ts)), jethi mobile app ne
+ * dareક jagya e ek j `ProductSummaryDto` male.
+ */
+export const PRODUCT_CARD_FIELDS = /* GraphQL */ `
   fragment ProductCard on Product {
     id
     handle

@@ -36,6 +36,20 @@ export const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
 
+  /**
+   * Staging deploy par OTP_EXPOSE_IN_RESPONSE=true karva devu, bhale
+   * NODE_ENV=production hoy.
+   *
+   * ⚠️ Aa on hoy tyare koi pan vyakti gme te number no OTP maangi ne code
+   * response ma j mele — etle gme te account ma login thai shake. FAKT
+   * evi deploy par jya khota users nathi. Real users aave e pehla kaadhi
+   * naakhvu.
+   */
+  ALLOW_OTP_EXPOSE_IN_PROD: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   DEFAULT_COUNTRY_CODE: z.string().length(2).default('IN'),
 
   // "abcd.myshopify.com" — protocol ke trailing slash vagar
@@ -69,6 +83,12 @@ export const envSchema = z.object({
   // chhe ane mobile app na dar scroll e API hit thay chhe.
   PRODUCT_LIST_CACHE_TTL: z.coerce.number().int().positive().default(300),
   PRODUCT_DETAIL_CACHE_TTL: z.coerce.number().int().positive().default(180),
+
+  // Collections products karta ochha badlaay chhe (merchant mahina e ek vaar
+  // navu category banaave), etle TTL lambo rakhi shakay — home page ni
+  // categories row dar vakhte Shopify sudhi na jaay.
+  COLLECTION_LIST_CACHE_TTL: z.coerce.number().int().positive().default(600),
+  COLLECTION_DETAIL_CACHE_TTL: z.coerce.number().int().positive().default(600),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -83,10 +103,16 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     throw new Error(`Invalid environment configuration:\n${details}`);
   }
 
-  // Production ma dev-only escape hatch band hovo j joiye.
-  if (parsed.data.NODE_ENV === 'production' && parsed.data.OTP_EXPOSE_IN_RESPONSE) {
+  // Production ma dev-only escape hatch band hovo j joiye — sivay ke staging
+  // deploy par ALLOW_OTP_EXPOSE_IN_PROD thi jaanijoine kholvama aavyo hoy.
+  if (
+    parsed.data.NODE_ENV === 'production' &&
+    parsed.data.OTP_EXPOSE_IN_RESPONSE &&
+    !parsed.data.ALLOW_OTP_EXPOSE_IN_PROD
+  ) {
     throw new Error(
-      'OTP_EXPOSE_IN_RESPONSE production ma true na hoi shake — aa OTP ne API response ma leak kare chhe.',
+      'OTP_EXPOSE_IN_RESPONSE production ma true na hoi shake — aa OTP ne API response ma leak kare chhe. ' +
+        'Staging par kharekhar joitu hoy to ALLOW_OTP_EXPOSE_IN_PROD=true set karo.',
     );
   }
 

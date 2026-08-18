@@ -130,11 +130,24 @@ export class IdentityService {
       data.status = CustomerStatus.ACTIVE;
     }
 
+    // ⚠️ primaryPhone/primaryEmail `@unique` chhe. Bijo koi Customer record
+    // pehla thi aa j value par besolo hoy (Shopify import e banaavelo
+    // duplicate) to aa update P2002 thi fate — ane e AAKHI transaction
+    // rollback kare. Etle user potano email kyarey verify j na kari shake.
+    //
+    // Etle pehla puchhi laiye. Collision hoy to backfill chhodi daiye:
+    // CustomerIdentity row to bhachi gai chhe, ane order matching (Shopify
+    // links) ane login lookup banne ena par j chale chhe — etle user ne kai
+    // atkatu nathi. Fakt checkout no buyerIdentity phone par rahi jashe.
     if (identifier.type === 'PHONE' && !customer.primaryPhone) {
-      data.primaryPhone = identifier.value;
+      if (await this.primaryIsFree(tx, customer.id, identifier)) {
+        data.primaryPhone = identifier.value;
+      }
     }
     if (identifier.type === 'EMAIL' && !customer.primaryEmail) {
-      data.primaryEmail = identifier.value;
+      if (await this.primaryIsFree(tx, customer.id, identifier)) {
+        data.primaryEmail = identifier.value;
+      }
     }
 
     if (opts.touchLogin) {
@@ -289,14 +302,33 @@ export class IdentityService {
    *      chhe, jena par ena 15 orders chhe
    *
    * Aa method e 4-me step sambhale chhe: juno record primary bane, ena par
-   * phone set thay (jethi hવે phone thi pan male), ane aapne banaavelo khali
-   * record kaadhi naakhiye — nahi to store ma dar returning customer no
-   * duplicate rahi jaay.
+   * phone set thay (jethi hવે phone thi pan male), ane aapne banaavelo record
+   * jato rahe — nahi to store ma dar returning customer no duplicate rahi jaay.
+   *
+   * "Jato rahe" na be rasta chhe, ane kayo laagu pade e ek j vaat par aadhaar
+   * rakhe chhe: **e record par order thai gayo chhe ke nahi.**
+   *
+   *   - Order NATHI thayo  → `deleteCustomerIfEmpty()`. Saaf ane sasto.
+   *     Aa tyare bane jyare user e email onboarding ma j verify karyo hoy.
+   *
+   *   - Order THAI GAYO   → `mergeCustomers()`. Have delete no sawaal j
+   *     nathi (order sathe customer delete na thai shake), etle be records ne
+   *     Shopify ma j bhega karva pade. Aa tyare bane jyare user e order karya
+   *     PACHHI email verify karyo hoy.
+   *
+   * Etle: app ma email verification jetlu vehelu thay, etli aa prakriya sasti
+   * ane surakshit rahe. Order pachhi thay to pan chale chhe, pan tyare Shopify
+   * na merge na niyamo (subscription, gift card, store credit) vachche aavi
+   * shake — ane tyare record manual review mate warn thai ne rahi jaay chhe.
    */
   async reconcileAfterEmailVerified(
     customerId: string,
     email: NormalizedIdentifier,
-  ): Promise<{ switchedToExisting: boolean; orphanDeleted: boolean }> {
+  ): Promise<{
+    switchedToExisting: boolean;
+    orphanDeleted: boolean;
+    orphanMerged: boolean;
+  }> {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
       select: { shopifyCustomerId: true, primaryPhone: true },
@@ -313,7 +345,11 @@ export class IdentityService {
           email: email.value,
         });
       }
-      return { switchedToExisting: false, orphanDeleted: false };
+      return {
+        switchedToExisting: false,
+        orphanDeleted: false,
+        orphanMerged: false,
+      };
     }
 
     // Juno record male gayo. E j asli chhe — ena par order history chhe.
@@ -323,28 +359,46 @@ export class IdentityService {
         ? customer.shopifyCustomerId
         : null;
 
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { shopifyCustomerId: existing.shopifyCustomerId },
-    });
-
-    // ⚠️ KRAM: orphan PEHLA delete karvo, PACHHI phone set karvo.
-    //
-    // Orphan par e j phone lagelo chhe, ane Shopify ma phone unique chhe.
-    // Ulto kram karso to "Phone has already been taken" aavse ane juno
-    // record kayamı phone vagar rahi jashe — etle e grahak fari kyarey
-    // phone thi nahi maळे ane aa aakho fero dar login e thato rahese.
+    // ⚠️ KRAM: pehla Shopify baaju no hisaab pato, PACHHI DB ma lakho.
+    // Merge pachhi kayo record bache e Shopify nakki kare chhe — etle "kayo
+    // primary chhe" e agaau thi lakhi devu khotu chhe.
     let orphanDeleted = false;
+    let orphanMerged = false;
+    let primaryShopifyId = existing.shopifyCustomerId;
+
     if (orphanId) {
       const { deleted, reason } =
         await this.shopifyCustomers.deleteCustomerIfEmpty(orphanId);
       orphanDeleted = deleted;
 
-      if (deleted) {
-        await this.prisma.shopifyCustomerLink.deleteMany({
-          where: { shopifyCustomerId: orphanId },
-        });
-      } else {
+      if (!deleted && reason === 'has orders') {
+        // App mathi order thai gayo chhe — have delete no sawaal j nathi.
+        // Merge j ek raasto chhe; nahi to aa vyakti Shopify ma kayami be
+        // records tarike rahi jashe (admin, segments, LTV — badhu vahenchayelu),
+        // ane website par login karse to app no order tya dekhaashe j nahi.
+        const merge = await this.shopifyCustomers.mergeCustomers(
+          existing.shopifyCustomerId,
+          orphanId,
+          {
+            // Phone fakt aapne banaavela record par chhe. Override na aapiye
+            // to merge pachhi e gum thai jaay ane aa vyakti fari kyarey phone
+            // thi na male — etle aakho fero dar login e thato rahe.
+            ...(customer?.primaryPhone && !existing.phone
+              ? { keepPhoneFrom: orphanId }
+              : {}),
+          },
+        );
+
+        if (merge.merged && merge.resultingCustomerId) {
+          orphanMerged = true;
+          primaryShopifyId = merge.resultingCustomerId;
+        } else {
+          this.logger.warn(
+            `Orphan Shopify customer ${orphanId} merge na thai shakyo ` +
+              `(${merge.reason}) — manual review joishe`,
+          );
+        }
+      } else if (!deleted) {
         this.logger.warn(
           `Orphan Shopify customer ${orphanId} rakhyo (${reason}) — ` +
             `manual review joishe`,
@@ -352,21 +406,62 @@ export class IdentityService {
       }
     }
 
-    // Have juna record par phone set kari daiye, jethi have thi phone thi
-    // pan male ane aa aakho fero fari na karvo pade.
-    // (Orphan delete na thayo hoy to phone haju block chhe — tyare skip.)
-    if (customer?.primaryPhone && !existing.phone && (!orphanId || orphanDeleted)) {
-      await this.shopifyCustomers.updateContact(existing.shopifyCustomerId, {
+    await this.prisma.customer.update({
+      where: { id: customerId },
+      data: { shopifyCustomerId: primaryShopifyId },
+    });
+
+    // Je Shopify record have astitva ma j nathi eno link kaadhi naakho.
+    // Merge ma Shopify e orphan ne pan raakhyo hoy shake — etle "kayo gayo"
+    // e `primaryShopifyId` sathe sarkhaavi ne j nakki karvu, maani ne nahi.
+    if (orphanId && (orphanDeleted || orphanMerged)) {
+      const goneId =
+        orphanMerged && primaryShopifyId === orphanId
+          ? existing.shopifyCustomerId
+          : orphanId;
+
+      await this.prisma.shopifyCustomerLink.deleteMany({
+        where: { shopifyCustomerId: goneId },
+      });
+    }
+
+    // Bachelo record link ma chhe e nakki karo — nahi to `GET /orders` ene
+    // chhodi de (e links ane primary, banne parthi ids bhega kare chhe).
+    await this.prisma.shopifyCustomerLink.createMany({
+      data: [
+        {
+          customerId,
+          shopifyCustomerId: primaryShopifyId,
+          matchedVia: 'email',
+          matchedValue: email.value,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    // Merge thayu hoy to phone override sathe pahonchi gayo chhe.
+    // Nahi to j alag thi set karvo pade — ane e tyare j shakya chhe jyare
+    // orphan kharekhar jato rahyo hoy, karan ke tya sudhi phone ena par
+    // block chhe ane Shopify "Phone has already been taken" aapse.
+    if (
+      customer?.primaryPhone &&
+      !existing.phone &&
+      !orphanMerged &&
+      (!orphanId || orphanDeleted)
+    ) {
+      await this.shopifyCustomers.updateContact(primaryShopifyId, {
         phone: customer.primaryPhone,
       });
     }
 
     this.logger.log(
-      `Reconciled customer ${customerId} → Shopify ${existing.shopifyCustomerId} ` +
-        `(${existing.orderCount} orders)${orphanDeleted ? ', orphan deleted' : ''}`,
+      `Reconciled customer ${customerId} → Shopify ${primaryShopifyId} ` +
+        `(${existing.orderCount} orders)` +
+        (orphanDeleted ? ', orphan deleted' : '') +
+        (orphanMerged ? `, orphan ${orphanId} merged in` : ''),
     );
 
-    return { switchedToExisting: true, orphanDeleted };
+    return { switchedToExisting: true, orphanDeleted, orphanMerged };
   }
 
   /**
@@ -375,6 +470,46 @@ export class IdentityService {
    * sambhavna sauthi vadhu chhe. Shopify ma order create karta vakhte aa j
    * vaparashe.
    */
+  /**
+   * `primaryPhone`/`primaryEmail` par bijo koi customer to nathi besi gayo ne?
+   *
+   * Aa check vagar P2002 aave chhe, ane e aakhi verify-transaction rollback
+   * kari naakhe chhe — etle user kyarey potano email verify j na kari shake.
+   *
+   * Aavu tyare bane jyare Shopify import e ek j vyakti na be Customer records
+   * banaavya hoy. Asli ukel e be records ne merge karvano chhe — schema ma
+   * `mergedIntoId` ane `MERGED` status ene mate j tayaar chhe, ane
+   * `resolveMergeChain()` e chain vaanchi pan le chhe. Fakt e merge LAKHVA nu
+   * baaki chhe, ane e import flow (Phase 2) sathe j aavvu joiye — aa halat
+   * tyare j bane chhe.
+   */
+  private async primaryIsFree(
+    tx: Tx,
+    customerId: string,
+    identifier: NormalizedIdentifier,
+  ): Promise<boolean> {
+    const taken = await tx.customer.findFirst({
+      where: {
+        ...(identifier.type === 'PHONE'
+          ? { primaryPhone: identifier.value }
+          : { primaryEmail: identifier.value }),
+        id: { not: customerId },
+      },
+      select: { id: true },
+    });
+
+    if (taken) {
+      this.logger.warn(
+        `Primary ${identifier.type.toLowerCase()} backfill skipped for customer ` +
+          `${customerId} — customer ${taken.id} already holds it. Identity chhe ` +
+          `j (login ane order matching chale chhe); aa be records merge joiye.`,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   private async setPrimaryShopifyCustomer(
     customerId: string,
     matches: ShopifyCustomerMatch[],

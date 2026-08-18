@@ -92,6 +92,27 @@ User e phone thi login karyu, pan website par na juna orders guest checkout ma
 **alag email** thi hata. E email ahiya verify kare etle e orders ena account
 sathe jodai jaay chhe.
 
+**Aa app ma KYARE puchhvu e code jetlu j agatya nu chhe** — onboarding ma
+puchho to Shopify no duplicate bane j nahi; order pachhi puchho to merge par
+aavvu pade chhe. Juo [App ma identity linking KYARE puchhvu](#app-ma-identity-linking-kyare-puchhvu).
+
+Response:
+
+```jsonc
+{
+  "linkedShopifyRecords": 2,   // ketla juna Shopify records jodaaya
+  "importedAddresses": 3,      // ketla addresses aavya
+  "customer": { /* CustomerProfileDto */ }
+}
+```
+
+Aa be aankdа user ne batavva jevi chhe — *"5 juna orders ane 2 addresses
+malya"* — nahi to ene khabar j nathi padti ke kai thayu.
+
+`409 Conflict` aave to eno matlab: **bija koi app account e aa email/phone
+pehla thi verify karelo chhe.** Aa jate resolve nathi thai shakto — user ne
+support taraf mokalvo.
+
 ### Addresses
 
 | Method | Route | Auth | Kaam |
@@ -261,6 +282,27 @@ SHOPIFY_CLIENT_ID="..."
 SHOPIFY_CLIENT_SECRET="..."
 ```
 
+**Scopes:**
+
+| Scope | Kem |
+|---|---|
+| `read_all_orders` | **Aa vagar Shopify fakt chhella 60 divas na orders aape chhe.** Juna grahak nu history j nahi male. |
+| `read_orders`, `read_products`, `read_inventory` | catalog ane order history |
+| `write_customers` | customer create/update (naam, email, phone) |
+| `write_draft_orders` | checkout |
+| `read_customer_merge` + `write_customer_merge` | duplicate customer records ne bhega karva. ⚠️ Aa `write_customers` ma **AAVI JATA NATHI** — alag thi maangva pade chhe. |
+
+Chhella be vagar app chale chhe, pan ek chokkas halat ma Shopify ma duplicate
+customer kayami rahi jaay chhe — juo [Reconcile](#reconcile--be-rasta-ane-kayo-laagu-pade-e-ek-j-vaat-par-aadhaar-rakhe).
+
+```bash
+npm run shopify:scopes   # Shopify e KHAREKHAR kaya scopes aapya e batave
+```
+
+Aa `npm run shopify:verify` karta alag chhe: Dev Dashboard ma scope umeri ne
+release karo to pan Shopify e chup-chaap kaadhi shake chhe (approval na hoy
+tyare). Tyare koi error nathi aavto — scope just gaayab hoy chhe.
+
 **Pachhi verify karo:**
 ```bash
 npm run shopify:verify
@@ -284,42 +326,104 @@ dekhaay ane website par pan e j vyakti tarike ole khaay.
 
 ### ⚠️ Store ni haqiqat je aa flow nakki kare chhe
 
-**Paithanic na juna customers pase fakt EMAIL chhe — phone nathi.** (Store na
-10 recent customers check karya: dar ek ma `phone: null`.)
+Aakhu customer base scan karyu (742 records, Feb 2023 – Aug 2026):
 
-Aapdo app **phone** thi login kare chhe. Etle juno grahak app ma aave tyare
-phone thi Shopify ma **kai j nathi malto** — ane e edge case nathi, aa j
-**default case** chhe.
+| | count | % |
+|---|---|---|
+| `customer.phone` chhe | 643 | 86.7% |
+| `customer.email` chhe | 102 | 13.7% |
 
-Etle flow aa rite chale chhe:
+Pan **je grahako e kharekhar order karyo chhe** (106) e alag chitra aape chhe:
+
+| | count |
+|---|---|
+| fakt email (phone nathi) | 62 |
+| fakt phone (email nathi) | 43 |
+| **banne** | **1** |
+
+**Aa "1" j aakhi architecture nu karan chhe.** Ek pan channel ekalo puro nathi:
+fakt email par match karo to 43 buyers gum, fakt phone par karo to 62 gum.
+Etle `CustomerIdentity` + `ShopifyCustomerLink` — ek vyakti na ghana
+verified identifiers ane ghana Shopify records.
+
+Aapdo app **phone** thi login kare chhe (base no 86.7% phone par chhe, ane
+India ma e j swabhavik chhe). Pan juno *buyer* motabhage email-only hoy chhe —
+etle ena mate phone thi Shopify ma **kai j nathi malto**, ane aapne ena mate
+navo record banaviye chhiye. E duplicate ne pachhi sudhaarvo pade chhe.
+
+### Reconcile — be rasta, ane kayo laagu pade e ek j vaat par aadhaar rakhe
 
 ```
 1. Juno grahak app ma phone thi login kare
       → Shopify ma phone thi kai na male (ena record ma phone chhe j nahi)
-      → aapne phone-only record banaviye  ← atyare aa duplicate chhe
+      → aapne phone-only record "A" banaviye  ← atyare aa duplicate chhe
 
 2. E potano email verify kare  ← AA STEP J BADHU JODE CHHE
-      → Shopify ma eno JUNO record male (15 orders sathe)
-      → juno record primary bane
-      → juna record par phone set thay (have thi phone thi pan malse)
-      → aapne banaavelo khali record DELETE thay
-      → website login pan chalu (Shopify email par code mokle chhe)
+      → Shopify ma eno JUNO record "B" male (15 orders sathe)
+      → B primary bane, links ma A ane B banne rahe
+      → ane pachhi A nu su karvu? Aa "A par order chhe ke nahi" par aadhaar rakhe:
+
+         A par order NATHI  →  customerDelete       (saaf, sasto)
+         A par order CHHE   →  customerMerge        (Shopify ma bhega kare)
 ```
 
 Aa `IdentityService.reconcileAfterEmailVerified()` ma chhe.
 
-**Kram bahu important chhe:** orphan **pehla** delete, **pachhi** phone set.
-Shopify ma phone unique chhe — ulto kram karo to `"Phone has already been
-taken"` aave chhe ane juno record kayamı phone vagar rahi jaay chhe.
+**Kram bahu important chhe:** orphan **pehla** jato rahe, **pachhi** phone set
+thay. Shopify ma phone unique chhe — ulto kram karo to `"Phone has already
+been taken"` aave chhe ane juno record kayamı phone vagar rahi jaay chhe.
 (Aa bug pakadaayo hato, test #5 ma.)
 
-### Etle app ma email verification jaruri chhe
+Merge ma aa `overrideFields.customerIdOfPhoneNumberToKeep` thi handle thay
+chhe — phone A parthi B par pahonchi jaay chhe, alag call vagar.
+
+**Merge async chhe.** Shopify turat `resultingCustomerId` aape chhe pan kaam
+background job ma thay chhe. Etle:
+
+- `resultingCustomerId` par j bharoso rakhvo — "moto record bachse" evu
+  **maani levu nahi**, Shopify jate nakki kare chhe
+- merge pachhi turat e record vaanchso to juno data dekhai shake
+
+**Badha records merge nathi thai shakta.** Active subscription, gift card,
+store credit, pending data request — aavu kai hoy to Shopify na paade chhe.
+Etle `customerMergePreview` pehla chale chhe, ane block thay to record
+`warn` sathe rahi jaay chhe (manual review). Data kyarey gum nathi thato:
+banne records links ma rahe chhe, etle app ma order history to puri j dekhaay
+chhe — nuksan fakt Shopify admin ni baaju no duplicate chhe.
+
+### App ma identity linking KYARE puchhvu
 
 Aa store mate email verify karvu **optional nathi** — juna grahak ne enu
 history, addresses ane website login apaavvano **ekmatra** raasto e j chhe.
-App ma aa step ne aagal laavvo:
 
-> *"Juna orders joVA chho? Tamaro email verify karo"*
+Pan *kyare* puchho chho e etlu j agatya nu chhe. **Order pehla puchho to
+delete no saaf raasto male chhe; order pachhi puchho to merge par aavvu pade
+chhe — ane merge block thai shake chhe.**
+
+| Kshan | Kem |
+|---|---|
+| **1. Onboarding (registration screen)** | Sauthi svachh. Haju ek pan order nathi, etle orphan delete thai jaay ane duplicate bane j nahi. Aa **default** raasto hovo joiye. |
+| **2. Orders screen no banner** | `emailVerified: false` hoy tyare. *"Juna orders nathi dekhata? Email verify karo."* |
+| **3. Checkout pehla** | **Chhelli svachh kshan.** Fakt phone verified hoy to email maango — **order bane e pehla**. |
+| **4. Profile → manage email/phone** | Hammesha rakho, pan fakt aana par bharoso na rakho — motabhaag na users tya jataa j nathi. |
+
+**Kyare nahi:** background ma chup-chaap kyarey nahi — e OTP mokle chhe, etle
+hammesha user-initiated hovu joiye. `PATCH /auth/me` ma email aapya pachhi
+aapo-aap OTP na mokalo; user ne "Verify" dabaavva do.
+
+**App ne kevi rite khabar pade ke puchhvu ke nahi** — `GET /auth/me` parthi,
+navu field kai joiytu nathi:
+
+| `email` | `emailVerified` | App su batave |
+|---|---|---|
+| `null` | `false` | *"Add your email to see your past orders"* |
+| set | `false` | *"Verify \<email\> to see your past orders"* (prefill karo) |
+| set | `true` | kai nahi — thai gayu |
+
+⚠️ `PATCH /auth/me` no email **fakt `contactEmail`** ma jaay chhe — verified
+nathi, etle order matching ma kyarey nathi vaparato ane Shopify par pan nathi
+jato. Ene `/auth/identities/verify` thi verify karo tyare j e `primaryEmail`
+bane chhe ane badhu jodaay chhe.
 
 ### Website login
 

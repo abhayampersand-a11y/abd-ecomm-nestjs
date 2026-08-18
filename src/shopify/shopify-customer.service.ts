@@ -4,8 +4,12 @@ import { ShopifyGraphqlClient } from './shopify-graphql.client';
 import {
   CUSTOMERS_SEARCH_QUERY,
   CUSTOMER_CREATE_MUTATION,
+  CUSTOMER_MERGE_MUTATION,
+  CUSTOMER_MERGE_PREVIEW_QUERY,
   CUSTOMER_ORDER_ADDRESSES_QUERY,
   CUSTOMER_UPDATE_MUTATION,
+  type CustomerMergePreviewResponse,
+  type CustomerMergeResponse,
   type CustomerMutationResponse,
   type CustomerOrderAddressesResponse,
   type CustomersSearchResponse,
@@ -273,6 +277,133 @@ export class ShopifyCustomerService {
 
     this.logger.log(`Deleted orphan app-created Shopify customer ${shopifyCustomerId}`);
     return { deleted: true };
+  }
+
+  /**
+   * Be Shopify customer records ne ek karе chhe — orders sathe j.
+   *
+   * Kyare jarur pade: user e phone thi app ma signup karyu, aapne ena mate
+   * navo Shopify record banaavyo, ene APP MA THI ORDER PAN KARYO — ane pachhi
+   * e potano email verify kare tyare khabar pade ke eno juno record pehla thi
+   * chhe. Have juno record delete NA thai shake (ena par order chhe), etle
+   * merge j ek raasto chhe. Merge vagar e vyakti Shopify ma kaydami be
+   * records tarike rahi jaay: admin, segments, LTV — badhu vahenchai jaay.
+   *
+   * `keepId` = jene rakhvo gamse (motabhage juno, vadhu orders vaalo).
+   * ⚠️ Pan aa fakt aapdi ICHCHHA chhe — Shopify jate nakki kare chhe ane
+   * `resultingCustomerId` ma kahे chhe. Etle e j return karીe chhiye, ane
+   * caller e E J save karvo, `keepId` nahi.
+   *
+   * Preview pehla chale chhe: subscription/gift card/store credit jevu kai
+   * hoy to Shopify merge nathi karva deto, ane tyare aapne chokkas karan
+   * sathe `merged: false` aapiye chhiye jethi caller manual review mate log
+   * kari shake.
+   *
+   * ⚠️ AA METHOD KYAREY THROW NATHI KARTU.
+   *
+   * Merge ne be alag scopes joiye chhe — `read_customer_merge` (preview) ane
+   * `write_customer_merge` (mutation) — ane e `write_customers` ma AAVI
+   * JATA NATHI, alag thi maangva pade chhe. E na hoy to Shopify ACCESS_DENIED
+   * aape chhe.
+   *
+   * Aa throw kare to aakho `reconcileAfterEmailVerified()` atki jaay — ane
+   * pachhi primary record set thato nathi, links sudharata nathi, addresses
+   * import thata nathi. Etle ek "nice to have" saaf-safai baaki nu badhu
+   * bagaadi naakhe. Etle ahiya badhu pakdi laiye chhiye ane fakt
+   * `merged: false` kahiye chhiye.
+   */
+  async mergeCustomers(
+    keepId: string,
+    mergeFromId: string,
+    overrides: { keepPhoneFrom?: string; keepEmailFrom?: string } = {},
+  ): Promise<{ merged: boolean; resultingCustomerId?: string; reason?: string }> {
+    if (keepId === mergeFromId) {
+      return { merged: true, resultingCustomerId: keepId };
+    }
+
+    const gid = (id: string) => `gid://shopify/Customer/${id}`;
+
+    let preview: CustomerMergePreviewResponse;
+    try {
+      preview = await this.shopify.request<CustomerMergePreviewResponse>(
+        CUSTOMER_MERGE_PREVIEW_QUERY,
+        { customerOneId: gid(keepId), customerTwoId: gid(mergeFromId) },
+        'customer.mergePreview',
+      );
+    } catch (err) {
+      // Sauthi sambhavit karan: `read_customer_merge` scope j nathi.
+      // `npm run shopify:scopes` chalavo — e aa spashta batavse.
+      return {
+        merged: false,
+        reason: `merge preview failed: ${(err as Error).message}`,
+      };
+    }
+
+    const blockers = preview.customerMergePreview?.customerMergeErrors ?? [];
+    if (blockers.length) {
+      const reason = blockers
+        .map((e) => `${e.errorFields?.join(',') || '?'}: ${e.message}`)
+        .join(' | ');
+      this.logger.warn(
+        `Merge blocked (${mergeFromId} -> ${keepId}): ${reason}`,
+      );
+      return { merged: false, reason };
+    }
+
+    let data: CustomerMergeResponse;
+    try {
+      data = await this.shopify.request<CustomerMergeResponse>(
+        CUSTOMER_MERGE_MUTATION,
+        {
+          customerOneId: gid(keepId),
+          customerTwoId: gid(mergeFromId),
+          overrideFields: {
+            // App e banaavelo record fakt phone laavyo chhe — e phone juna
+            // record par pahonchvo j joiye, nahi to aa vyakti fari kyarey
+            // phone thi nahi male ane aakho reconcile fero fari thato rahese.
+            ...(overrides.keepPhoneFrom && {
+              customerIdOfPhoneNumberToKeep: gid(overrides.keepPhoneFrom),
+            }),
+            ...(overrides.keepEmailFrom && {
+              customerIdOfEmailToKeep: gid(overrides.keepEmailFrom),
+            }),
+          },
+        },
+        'customer.merge',
+      );
+    } catch (err) {
+      // `write_customer_merge` scope khute chhe, ke Shopify j nathi pahonchi
+      // rahyu. Banne ma orphan rahi jaay chhe — e chalse, log ma dekhai jashe.
+      return {
+        merged: false,
+        reason: `merge failed: ${(err as Error).message}`,
+      };
+    }
+
+    const result = data.customerMerge;
+
+    if (result?.userErrors?.length) {
+      const reason = result.userErrors.map((e) => e.message).join(' | ');
+      this.logger.warn(`customerMerge failed (${mergeFromId} -> ${keepId}): ${reason}`);
+      return { merged: false, reason };
+    }
+
+    const resultingCustomerId = result?.resultingCustomerId
+      ? idFromGid(result.resultingCustomerId)
+      : undefined;
+
+    if (!resultingCustomerId) {
+      return { merged: false, reason: 'no resultingCustomerId in response' };
+    }
+
+    // Job async chale chhe — orders khsedvani prakriya thodi var laage. Aapne
+    // rah nathi jota: resultingCustomerId aavi gayo chhe ane e j saacho chhe.
+    this.logger.log(
+      `Merged Shopify customer ${mergeFromId} into ${resultingCustomerId} ` +
+        `(job ${result?.job?.id ?? 'n/a'})`,
+    );
+
+    return { merged: true, resultingCustomerId };
   }
 
   /**

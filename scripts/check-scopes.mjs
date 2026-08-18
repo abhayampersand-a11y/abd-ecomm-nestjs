@@ -48,6 +48,17 @@ for (const s of granted) console.log(`  ${s}`);
 
 /** Aa vagar orders fakt 60 divas na male chhe */
 const CRITICAL = ['read_all_orders'];
+
+/**
+ * Aa vagar app chale chhe — pan ek chokkas halat ma Shopify ma duplicate
+ * customer kayami rahi jaay chhe: user phone thi signup kare, APP MA THI
+ * ORDER KARE, ane PACHHI potano email verify kare. Tyare aapne banaavelo
+ * record delete nathi thai shakto (ena par order chhe), etle merge j raasto
+ * chhe — ane merge ne aa be scopes joiye chhe.
+ *
+ * ⚠️ Aa `write_customers` ma AAVI JATA NATHI. Alag thi maangva pade chhe.
+ */
+const MERGE = ['read_customer_merge', 'write_customer_merge'];
 console.log('');
 
 let missing = false;
@@ -57,6 +68,11 @@ for (const need of CRITICAL) {
   if (!has) missing = true;
 }
 
+const missingMerge = MERGE.filter((s) => !granted.includes(s));
+for (const need of MERGE) {
+  console.log(`  ${granted.includes(need) ? '✅' : '⚠️ '} ${need}`);
+}
+
 if (missing) {
   console.log(
     '\n`read_all_orders` nathi — Shopify fakt CHHELLA 60 DIVAS na orders aapse.\n' +
@@ -64,6 +80,18 @@ if (missing) {
       'pachhi Overview → Installs → Install app (navi permission approve karva).\n',
   );
   process.exit(1);
+}
+
+if (missingMerge.length) {
+  console.log(
+    `\n${missingMerge.join(' ane ')} nathi — app chale chhe, pan customer\n` +
+      'MERGE nahi thai shake. Aeni asar: user phone thi signup kare, app ma thi\n' +
+      'order kare, ane pachhi email verify kare — to Shopify ma e vyakti na BE\n' +
+      'records kayami rahi jashe (app ma order history to puri j dekhaashe).\n' +
+      'Log ma "merge preview failed" dekhaay to karan aa j chhe.\n\n' +
+      'Umerva mate: Dev Dashboard → Versions → Create version → scopes → Release,\n' +
+      'pachhi Overview → Installs → Install app (navi permission approve karva).\n',
+  );
 }
 
 console.log('\nBadhu barabar.\n');

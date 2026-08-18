@@ -86,6 +86,65 @@ export const CUSTOMER_UPDATE_MUTATION = /* GraphQL */ `
   }
 `;
 
+/**
+ * Be Shopify customer records ne EK karva pehla "aa merge thai shakse?" puchhe chhe.
+ *
+ * Kem jaruri chhe: badha records merge nathi thai shakta. Active subscription,
+ * gift card, store credit, pending data request — aavu kai hoy to Shopify na
+ * paade chhe. Sidha merge karo to error aave; preview thi pehla khabar padi
+ * jaay ane aapne saaf fallback laai shakiye.
+ */
+export const CUSTOMER_MERGE_PREVIEW_QUERY = /* GraphQL */ `
+  query CustomerMergePreview($customerOneId: ID!, $customerTwoId: ID!) {
+    customerMergePreview(
+      customerOneId: $customerOneId
+      customerTwoId: $customerTwoId
+    ) {
+      resultingCustomerId
+      customerMergeErrors {
+        errorFields
+        message
+      }
+    }
+  }
+`;
+
+/**
+ * Be customer records ne ek ma bhega kare chhe — orders, addresses, badhu sathe.
+ *
+ * KRAM: Shopify jate nakki kare chhe ke kayo record bache. Etle aapne
+ * resultingCustomerId par j bharoso rakhvo — "moto vaalo bachse" evu MAANI
+ * levu nahi.
+ *
+ * Aa ASYNC chhe: resultingCustomerId turat male chhe pan kaam background job
+ * ma thay chhe. Merge pachhi turat e record vaanchso to juno data dekhai shake.
+ *
+ * overrideFields thi nakki karay ke kaya record nu email/phone/naam rakhvu.
+ * Aa j e jagya chhe jya app e banaavelo phone juna record sudhi pahonche chhe.
+ */
+export const CUSTOMER_MERGE_MUTATION = /* GraphQL */ `
+  mutation CustomerMerge(
+    $customerOneId: ID!
+    $customerTwoId: ID!
+    $overrideFields: CustomerMergeOverrideFields
+  ) {
+    customerMerge(
+      customerOneId: $customerOneId
+      customerTwoId: $customerTwoId
+      overrideFields: $overrideFields
+    ) {
+      resultingCustomerId
+      job {
+        id
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 // ---------------------------------------------------------------------------
 // Raw shapes — fakt src/shopify/ ni andar
 // ---------------------------------------------------------------------------
@@ -137,4 +196,19 @@ export interface CustomersSearchResponse {
 
 export interface CustomerOrderAddressesResponse {
   orders: { nodes: RawOrderAddress[] };
+}
+
+export interface CustomerMergePreviewResponse {
+  customerMergePreview: {
+    resultingCustomerId: string | null;
+    customerMergeErrors: Array<{ errorFields: string[]; message: string }>;
+  } | null;
+}
+
+export interface CustomerMergeResponse {
+  customerMerge?: {
+    resultingCustomerId: string | null;
+    job: { id: string } | null;
+    userErrors: Array<{ field: string[] | null; message: string }>;
+  };
 }

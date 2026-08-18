@@ -10,6 +10,7 @@ import { OtpPurpose } from '@prisma/client';
 import { AddressesService } from '../addresses/addresses.service';
 import type { Env } from '../config/env.schema';
 import { PrismaService } from '../prisma/prisma.service';
+import { ShopifyCustomerService } from '../shopify/shopify-customer.service';
 import { normalizeIdentifier } from '../common/utils/identifier.util';
 import {
   toCustomerProfileDto,
@@ -31,6 +32,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly identity: IdentityService,
     private readonly config: ConfigService<Env, true>,
+    private readonly shopifyCustomers: ShopifyCustomerService,
     /**
      * ⚠️ Circular dependency chhe: AddressesModule ne JwtAuthGuard ane
      * IdentityService mate AuthModule joiye chhe, ane AuthModule ne identity
@@ -229,7 +231,7 @@ export class AuthService {
       gender?: string;
     },
   ): Promise<CustomerProfileDto> {
-    await this.prisma.customer.update({
+    const customer = await this.prisma.customer.update({
       where: { id: customerId },
       data: {
         ...(data.firstName !== undefined && { firstName: data.firstName }),
@@ -241,7 +243,45 @@ export class AuthService {
       },
     });
 
+    await this.syncNameToShopify(customer, data);
+
     return this.getProfile(customerId);
+  }
+
+  /**
+   * Naam Shopify par pan mokli daiye — nahi to store admin ma ane order
+   * confirmation mail ma juno (ke khali) naam j dekhaay.
+   *
+   * ⚠️ Email JAAN-ine ahiya thi Shopify par NATHI jato. Aa email verified
+   * nathi, ane un-verified email Shopify par mukiye to (jya email unique
+   * chhe) e bija na record sathe jodai jaay. Email fakt `IdentityService`
+   * na verify flow ma j Shopify sudhi pahonche chhe.
+   *
+   * Best-effort: Shopify down hoy to pan profile aapni DB ma save thai gayu
+   * chhe, etle user ne fail nathi batavvu — fakt log thay chhe.
+   */
+  private async syncNameToShopify(
+    customer: {
+      shopifyCustomerId: string | null;
+      firstName: string | null;
+      lastName: string | null;
+    },
+    data: { firstName?: string; lastName?: string },
+  ): Promise<void> {
+    if (!customer.shopifyCustomerId) return;
+    if (data.firstName === undefined && data.lastName === undefined) return;
+
+    try {
+      await this.shopifyCustomers.updateContact(customer.shopifyCustomerId, {
+        ...(data.firstName !== undefined && { firstName: customer.firstName }),
+        ...(data.lastName !== undefined && { lastName: customer.lastName }),
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Shopify name sync failed for customer ${customer.shopifyCustomerId}: ` +
+          `${(err as Error).message}`,
+      );
+    }
   }
 
   async getProfile(customerId: string): Promise<CustomerProfileDto> {

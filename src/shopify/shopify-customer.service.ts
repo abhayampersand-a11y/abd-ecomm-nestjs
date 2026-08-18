@@ -157,27 +157,42 @@ export class ShopifyCustomerService {
   }
 
   /**
-   * Shopify customer par email/phone set kare chhe.
+   * Shopify customer par email/phone/naam set kare chhe.
    *
    * Email set karvu e j e step chhe je **website login chalu kare chhe** —
    * Shopify na customer accounts email par code mokle chhe, etle email vagar
    * app no user website par login j nathi kari shakto.
    *
-   * ⚠️ Fakt VERIFIED values sathe j call karvu.
+   * ⚠️ email/phone FAKT verified values sathe j moklvi. firstName/lastName
+   * par aa niyam lagu nathi padto — e unique nathi, etle koi bija na record
+   * sathe khoti rite jodaan nathi karaavta.
    */
   async updateContact(
     shopifyCustomerId: string,
-    fields: { email?: string; phone?: string },
+    fields: {
+      email?: string;
+      phone?: string;
+      firstName?: string | null;
+      lastName?: string | null;
+    },
   ): Promise<{ success: boolean; reason?: string }> {
-    if (!fields.email && !fields.phone) return { success: true };
+    // Naam mate `null` no matlab "Shopify par thi kaadhi naakh" ane
+    // `undefined` no "hath j na lagaadto" — etle truthy check nahi chale.
+    const changes = {
+      ...(fields.email && { email: fields.email }),
+      ...(fields.phone && { phone: fields.phone }),
+      ...(fields.firstName !== undefined && { firstName: fields.firstName }),
+      ...(fields.lastName !== undefined && { lastName: fields.lastName }),
+    };
+
+    if (Object.keys(changes).length === 0) return { success: true };
 
     const data = await this.shopify.request<CustomerMutationResponse>(
       CUSTOMER_UPDATE_MUTATION,
       {
         input: {
           id: `gid://shopify/Customer/${shopifyCustomerId}`,
-          ...(fields.email && { email: fields.email }),
-          ...(fields.phone && { phone: fields.phone }),
+          ...changes,
         },
       },
       'customer.update',
@@ -198,7 +213,7 @@ export class ShopifyCustomerService {
 
     this.logger.log(
       `Shopify customer ${shopifyCustomerId} updated ` +
-        `(${Object.keys(fields).join(', ')})`,
+        `(${Object.keys(changes).join(', ')})`,
     );
     return { success: true };
   }

@@ -5,19 +5,78 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3001/api/v1" },
-    { "key": "identifier", "value": "9876543210" },
-    { "key": "linkIdentifier", "value": "old-email@example.com" },
-    { "key": "productHandle", "value": "peach-traditional-paithani-dupatta" },
-    { "key": "collectionHandle", "value": "dupattas" },
-    { "key": "devCode", "value": "" },
-    { "key": "linkDevCode", "value": "" },
-    { "key": "accessToken", "value": "" },
-    { "key": "refreshToken", "value": "" },
-    { "key": "nextCursor", "value": "" },
-    { "key": "collectionCursor", "value": "" },
-    { "key": "collectionProductCursor", "value": "" },
-    { "key": "addressId", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "https://abd-ecomm-nestjs.onrender.com/api/v1"
+    },
+    {
+      "key": "identifier",
+      "value": "9876543210"
+    },
+    {
+      "key": "linkIdentifier",
+      "value": "old-email@example.com"
+    },
+    {
+      "key": "productHandle",
+      "value": "peach-traditional-paithani-dupatta"
+    },
+    {
+      "key": "collectionHandle",
+      "value": "dupattas"
+    },
+    {
+      "key": "devCode",
+      "value": ""
+    },
+    {
+      "key": "linkDevCode",
+      "value": ""
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "nextCursor",
+      "value": ""
+    },
+    {
+      "key": "collectionCursor",
+      "value": ""
+    },
+    {
+      "key": "collectionProductCursor",
+      "value": ""
+    },
+    {
+      "key": "addressId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderCursor",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cartItemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "variantId",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -25,7 +84,15 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
         "description": "Status of Postgres, Redis and the Shopify configuration.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nstatus             ← \"ok\" when postgres AND redis are both \"up\",\n                     otherwise \"degraded\"\n\nservices.postgres  ← whether Prisma's `SELECT 1` succeeded\nservices.redis     ← the reply to a Redis PING\n\nservices.shopify   ← A CONFIG CHECK ONLY — \"configured\" | \"not-configured\"\n                     ⚠️ Shopify is deliberately NOT pinged here. The health\n                     check runs every few seconds, and pinging Shopify would\n                     drain its cost bucket. So \"configured\" means \"the\n                     credentials are present\", NOT \"Shopify is reachable\".\n\ntimestamp          ← the server's current time, ISO 8601\n\n────────────────────────────────\nNOTES\n────────────────────────────────\nThis endpoint is exempt from rate limiting (@SkipThrottle) — the platform\nhealth check hits it constantly and must never be throttled.\n\nThis is the path configured as Render's Health Check Path:\n  /api/v1/health"
       }
     },
@@ -57,15 +124,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"identifier\": \"{{identifier}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/otp/request",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "otp", "request"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "otp",
+                "request"
+              ]
             },
             "description": "Sends a one-time password to a phone number or an email address.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   A phone number OR an email address — both go in this SINGLE\n             field. The app does not need two separate screens; the server\n             works out which one it is and normalises it.\n             All of these are accepted:\n               \"9876543210\", \"+91 98765 43210\", \"user@gmail.com\"\n             A phone number without a country code gets\n             DEFAULT_COUNTRY_CODE (default IN) applied.\n             Required, max 255 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsent                ← ALWAYS `true`.\n                      The response is identical whether or not the user\n                      exists. Otherwise someone could submit phone numbers\n                      one by one and learn which are registered — an\n                      account enumeration attack.\n\nsentTo              ← the destination, masked: \"+91******3210\"\n                      Lets the app say \"we sent a code to this number\"\n                      without echoing the full value back.\n\nexpiresAt           ← now + OTP_TTL_SECONDS (default 300s), as ISO 8601\nresendAfterSeconds  ← OTP_RESEND_COOLDOWN_SECONDS (default 60)\n                      The app should disable its \"Resend\" button for this\n                      many seconds.\n\ndevCode             ← ONLY present when OTP_EXPOSE_IN_RESPONSE=true.\n                      ⚠️ This key DOES NOT EXIST in production, so the app\n                      must never depend on it. The test script saves it to\n                      `{{devCode}}` automatically.\n                      When OTP_EXPOSE_IN_RESPONSE=false, the code is printed\n                      to the server logs instead (the console OTP sender).\n\n────────────────────────────────\nRATE LIMITS — THREE SEPARATE LAYERS\n────────────────────────────────\n1. Route level:    10 requests/min per IP (@Throttle)\n2. Per identifier: OTP_MAX_PER_IDENTIFIER_PER_HOUR (default 5)\n3. Per IP:         OTP_MAX_PER_IP_PER_HOUR (default 20)\n\nBreaching any of them returns 429. The counters live in Redis.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — identifier missing, or longer than 255 characters\n429 — any of the three rate limits above was exceeded"
           }
@@ -94,15 +172,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"identifier\": \"{{identifier}}\",\n  \"code\": \"{{devCode}}\",\n  \"deviceId\": \"postman\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/otp/verify",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "otp", "verify"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "otp",
+                "verify"
+              ]
             },
             "description": "Verifies the OTP and logs the user in.\n\n📌 THERE IS NO SEPARATE SIGNUP ENDPOINT. If the user is new they are created\nhere; if they already exist as an IMPORTED Shopify record, that record is\nactivated instead — keeping all of their history.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to `1. Request OTP`. The OTP is\n             bound to that identifier, so anything else will not match.\n             Required, max 255 characters.\n\ncode         The one-time password. Filled in from `{{devCode}}` during\n             development. Length is OTP_LENGTH (default 6); the field\n             accepts 4-8 characters.\n\ndeviceId     Ties the session to a device, which is what makes per-device\n             logout and session auditing possible. Optional, but the app\n             should always send a stable value. Max 128 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nisNewUser             ← whether this is the first ever login for this\n                        identifier. When `true` the app should show the\n                        registration screen → `4. Update profile`.\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records were\n                        attached to this account during login. Greater than\n                        zero for someone who previously checked out on the\n                        website as a guest.\n\ncustomer              ← the profile object — exactly the same shape as\n                        `3. Me`, documented there.\n\ntokens.accessToken    ← a JWT, valid for JWT_ACCESS_TTL (default 900s).\n                        Send it on protected requests as:\n                          Authorization: Bearer <token>\n\ntokens.refreshToken   ← an opaque random string (NOT a JWT), valid for\n                        REFRESH_TOKEN_TTL_DAYS (default 60 days).\n\ntokens.expiresIn      ← remaining lifetime of accessToken, IN SECONDS\ntokens.tokenType      ← always \"Bearer\"\n\nThe test script stores accessToken and refreshToken in collection variables,\nso nothing needs to be copied manually.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong code, expired code, or OTP_MAX_ATTEMPTS (default 5) exhausted\n429 — 20 requests/min per IP exceeded"
           }
@@ -111,11 +200,21 @@
           "name": "3. Me (profile)",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
             },
             "description": "The signed-in user's profile, including every verified email and phone.\n\nRequires the Authorization header.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid                   ← OUR Customer.id (a UUID).\n                       This is never a Shopify id. Shopify's numeric ids do\n                       not leave the server.\n\nphone                ← Customer.primaryPhone (the verified one)\n                       `null` if the user signed up with an email.\n\nemail                ← Customer.primaryEmail (VERIFIED) when present,\n                       otherwise Customer.contactEmail (the UNVERIFIED one\n                       typed into the registration screen).\n                       ⚠️ So `email` can be populated while\n                       `emailVerified` is still `false` — they are two\n                       different things.\n\nemailVerified        ← whether any verified identity of type EMAIL exists\nphoneVerified        ← whether any verified identity of type PHONE exists\n\nfirstName            ← Customer.firstName, set by `4. Update profile`\nlastName             ← Customer.lastName, set by `4. Update profile`\n\nhasPassword          ← whether Customer.passwordHash is set.\n                       Always `false` in Phase 1 — login is OTP only. The\n                       field exists so the app does not break when password\n                       login is added later.\n\nverifiedIdentifiers  ← [{ type: \"PHONE\" | \"EMAIL\", value }]\n                       Every verified identifier on this account.\n                       📌 Past orders are matched ONLY against these values.\n                       An unverified email is never used for matching.\n\ncreatedAt            ← Customer.createdAt, as ISO 8601\n\n────────────────────────────────\nWHAT THE APP SHOULD DO\n────────────────────────────────\nWhen `emailVerified` is `false`, show \"Verify your email to see older\norders\" and start the flow in the `Identity linking` folder.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing, malformed or expired accessToken"
           }
@@ -125,8 +224,14 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -134,8 +239,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
             },
             "description": "The registration screen. Show it only when `2. Verify OTP` returned\n`isNewUser: true`.\n\n────────────────────────────────\nBODY — all three fields are OPTIONAL (partial update)\n────────────────────────────────\n\nfirstName    Max 80 characters. Omit it and the stored value is unchanged.\nlastName     Max 80 characters. Omit it and the stored value is unchanged.\n\nemail        ⚠️ THIS EMAIL IS NOT VERIFIED.\n             It is stored in the `contactEmail` column, for contact purposes\n             only. The profile will still report `emailVerified: false`, and\n             THIS EMAIL IS NEVER USED TO MATCH PAST ORDERS.\n\n             Why: anyone could type somebody else's address here. If we\n             treated it as verified, they would be shown that person's order\n             history. Verifying it requires the OTP flow in the\n             `Identity linking` folder.\n\n             Must be a valid email address, max 255 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe updated profile, in exactly the same shape as `3. Me`:\n\nid                   ← our Customer.id (UUID)\nphone                ← Customer.primaryPhone\nemail                ← primaryEmail if verified, else contactEmail —\n                       so this reflects what you just sent\nemailVerified        ← STILL `false` after this call, by design\nphoneVerified        ← whether a verified PHONE identity exists\nfirstName            ← what you just sent, or the previous value\nlastName             ← what you just sent, or the previous value\nhasPassword          ← always false in Phase 1\nverifiedIdentifiers  ← unchanged by this call\ncreatedAt            ← Customer.createdAt\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — invalid email, a field over its length limit, or an unknown field\n      (unknown properties are rejected, not silently dropped)\n401 — missing or expired accessToken"
           }
@@ -162,15 +272,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\",\n  \"deviceId\": \"postman\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/token/refresh",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "token", "refresh"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "token",
+                "refresh"
+              ]
             },
             "description": "Exchanges a refresh token for a fresh pair of tokens.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nrefreshToken   The MOST RECENT refresh token. The test scripts keep\n               `{{refreshToken}}` up to date for you.\n               Required, max 512 characters.\n\ndeviceId       Optional, but send THE SAME value used at login so the\n               session stays attached to the same device.\n               Max 128 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\naccessToken    ← a NEW JWT (JWT_ACCESS_TTL, default 900s)\nrefreshToken   ← a NEW refresh token. The one you just sent is revoked\n                 at that very moment.\nexpiresIn      ← remaining lifetime of accessToken, in seconds\ntokenType      ← always \"Bearer\"\n\n────────────────────────────────\n📌 ROTATION — WORTH UNDERSTANDING\n────────────────────────────────\nEvery refresh destroys the old token and issues a new one.\n\nIf a token that has ALREADY BEEN USED shows up again, there is only one\nreasonable explanation: it was stolen. When that happens the entire token\nfamily for that user is revoked and they must log in again.\n\nSo the app must always persist the LATEST refresh token. An old copy left\nlying around in storage will log the user out if it is ever replayed.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — unknown, expired, or already-used refresh token\n      (an already-used one also revokes the whole family)"
           }
@@ -180,8 +301,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -189,8 +316,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/logout",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "logout"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
             },
             "description": "Ends the session on this device only.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nrefreshToken   OPTIONAL, max 512 characters.\n               When supplied, that specific token is revoked, which ends\n               this device's session.\n               When omitted nothing is revoked server-side — you still get\n               a 200, but the session remains alive.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsuccess   ← always `true`, whether or not a token was supplied\n\n────────────────────────────────\n⚠️ THE APP MUST ALSO DO THIS\n────────────────────────────────\nThe accessToken is a JWT, which means it is STATELESS. After logout it stays\nvalid until it expires on its own (JWT_ACCESS_TTL, default 15 minutes) —\nthe server cannot recall it.\n\nSo on logout the app MUST delete both tokens from local storage. Calling\nthis endpoint alone is not enough.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
@@ -199,11 +331,21 @@
           "name": "7. Logout everywhere",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/auth/logout-all",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "logout-all"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout-all"
+              ]
             },
             "description": "Ends every session on every device. No body — the user is identified from\nthe accessToken.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsessionsRevoked   ← how many refresh tokens were revoked, which is the\n                    number of devices that were signed in.\n                    The app can show \"Signed out of 3 devices\".\n                    `0` simply means there were no other live sessions.\n\n────────────────────────────────\nWHEN TO USE IT\n────────────────────────────────\nThe \"Log out of all devices\" button, and after any security-sensitive\nchange such as a phone number update.\n\n⚠️ Like `6. Logout`, this only revokes REFRESH tokens. Access tokens on\nother devices keep working until they expire on their own — at most\nJWT_ACCESS_TTL (default 15 minutes).\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
@@ -237,8 +379,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -246,8 +394,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/identities/request-otp",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "identities", "request-otp"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "identities",
+                "request-otp"
+              ]
             },
             "description": "Sends an OTP to an ADDITIONAL email or phone that an already signed-in user\nwants to prove they own. Requires the Authorization header.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   The email or phone number to verify, held in\n             `{{linkIdentifier}}`.\n             ⚠️ This is normally DIFFERENT from the identifier they logged\n             in with — typically the email used for guest checkout on the\n             website.\n             Required, max 255 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsent                ← always `true`, for the same enumeration-safety reason\n                      as `Auth / 1. Request OTP`\nsentTo              ← the destination, masked: \"o***@example.com\"\nexpiresAt           ← now + OTP_TTL_SECONDS (default 300s), ISO 8601\nresendAfterSeconds  ← OTP_RESEND_COOLDOWN_SECONDS (default 60)\ndevCode             ← only when OTP_EXPOSE_IN_RESPONSE=true; the test script\n                      saves it to `{{linkDevCode}}`\n\n────────────────────────────────\nRATE LIMITS\n────────────────────────────────\n10 requests/min per IP at the route level, plus the same per-identifier and\nper-IP OTP limits described in `Auth / 1. Request OTP`.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken\n429 — any OTP rate limit exceeded"
           }
@@ -257,8 +411,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -266,8 +426,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/identities/verify",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "identities", "verify"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "identities",
+                "verify"
+              ]
             },
             "description": "Once verification succeeds — and not before — the old Shopify records\nbelonging to that identifier are attached to the user's account.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to\n             `1. Request OTP for another email/phone`.\n             Required, max 255 characters.\n\ncode         The one-time password, filled in from `{{linkDevCode}}`.\n             4-8 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records this\n                        verification attached. `0` is a perfectly normal\n                        result — it just means Shopify has no record under\n                        that email.\n\ncustomer              ← the updated profile, same shape as `Auth / 3. Me`.\n                        The newly verified identifier now appears in\n                        `verifiedIdentifiers`, and for an email\n                        `emailVerified` flips to `true`.\n\n────────────────────────────────\n🔒 WHY THERE IS AN EXTRA OWNERSHIP CHECK\n────────────────────────────────\nThe server verifies that the OTP was issued to the SAME user who is now\npresenting it. Without that check an attacker could request an OTP for\ntheir own address, then submit it using ANOTHER user's accessToken — and\nquietly attach their email to that person's account.\n\nThis is also why linking only works against verified identifiers. The\nunverified email from `Auth / 4. Update profile` is never used for order\nmatching.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong or expired code, OR the OTP was issued to a different user\n429 — 20 requests/min per IP exceeded"
           }
@@ -282,11 +448,20 @@
           "name": "1. List",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/addresses",
-              "host": ["{{baseUrl}}"],
-              "path": ["addresses"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "addresses"
+              ]
             },
             "description": "All of the user's saved addresses. The default one always comes first.\n\nThe response is a plain ARRAY — there is no pagination, because nobody has\nhundreds of addresses.\n\n────────────────────────────────\nRESPONSE — where each key of an item comes from\n────────────────────────────────\n\nid            ← our Address.id (UUID). Never a Shopify id.\n                This is the value used as `{{addressId}}` in update and\n                delete below.\n\nfirstName     ← Address.firstName   (may be null)\nlastName      ← Address.lastName    (may be null)\nphone         ← Address.phone       (may be null)\n\nline1         ← Address.line1       (always present)\nline2         ← Address.line2       (may be null)\ncity          ← Address.city        (always present)\nprovince      ← Address.province    (may be null)\nzip           ← Address.zip         (always present)\ncountry       ← Address.country     (always present)\ncountryCode   ← Address.countryCode (ISO 2-letter, may be null)\n\nisDefault     ← Address.isDefault\n                Exactly one address has this set to `true`.\n\nimported      ← computed as Address.importedFromOrder !== null\n                `true`  = pulled automatically from a past order\n                          (see `5. Import from past orders`)\n                `false` = the user added it themselves\n                The app can use this to show a \"from your past order\" badge.\n\n📌 `provinceCode` exists in the database but is deliberately NOT returned —\nthe app has no use for it. Add it to the address mapper if that changes.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
@@ -313,8 +488,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -322,8 +503,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/addresses",
-              "host": ["{{baseUrl}}"],
-              "path": ["addresses"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "addresses"
+              ]
             },
             "description": "Saves a new address for the signed-in user.\n\n────────────────────────────────\nBODY — which fields are required\n────────────────────────────────\n\nREQUIRED:\n  line1          3-200 characters\n  city           2-100 characters\n  zip            3-20 characters\n  country        2-100 characters (full name, e.g. \"India\")\n\nOPTIONAL:\n  firstName      max 80\n  lastName       max 80\n  phone          max 30\n  line2          max 200\n  province       max 100 (e.g. \"Gujarat\")\n  provinceCode   max 10  (e.g. \"GJ\") — stored, but not returned\n  countryCode    EXACTLY 2 characters, ISO (e.g. \"IN\")\n  isDefault      boolean — see the rule below\n\n⚠️ Unknown fields are REJECTED, not ignored. Sending anything outside this\nlist returns 400 with \"property X should not exist\".\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe address that was created, in the same shape as `1. List`:\n\nid            ← the newly generated Address.id (UUID); the test script\n                saves it to `{{addressId}}`\nfirstName     ← what you sent, or null\nlastName      ← what you sent, or null\nphone         ← what you sent, or null\nline1         ← what you sent\nline2         ← what you sent, or null\ncity          ← what you sent\nprovince      ← what you sent, or null\nzip           ← what you sent\ncountry       ← what you sent\ncountryCode   ← what you sent, or null\nisDefault     ← `true` if this is the first address, or if you asked for it\nimported      ← always `false` here — you added it by hand\n\n────────────────────────────────\nTWO BEHAVIOURS WORTH KNOWING\n────────────────────────────────\n\n1. THE FIRST address automatically becomes the default, even if you did not\n   send `isDefault`.\n\n2. DEDUPLICATION — sending the same address again does NOT create a\n   duplicate; the existing row is updated instead. The fingerprint is built\n   from line1 + line2 + city + zip + country, with case, spacing and\n   punctuation stripped:\n\n     \"A-101, Shanti Nagar\"   and   \"a 101 shanti nagar\"   →   THE SAME\n\n   Why it matters: one address typically appears across many past orders.\n   Without deduplication the import feature would show the user the same\n   address fifteen times, turning a convenience into a nuisance.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — a required field is missing, a length rule was broken, or an unknown\n      field was included\n401 — missing or expired accessToken"
           }
@@ -333,8 +518,14 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -342,8 +533,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/addresses/{{addressId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["addresses", "{{addressId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "addresses",
+                "{{addressId}}"
+              ]
             },
             "description": "Partial update — any field you DO NOT send keeps its current value.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   `{{addressId}}`, saved automatically by `2. Create`.\n      Must be a valid UUID or the request fails with 400 before it ever\n      reaches the database.\n\n────────────────────────────────\nBODY — every field is optional\n────────────────────────────────\n\nSame fields and the same limits as `2. Create`, except that line1, city,\nzip and country are optional here too:\n\n  firstName      max 80\n  lastName       max 80\n  phone          max 30\n  line1          3-200\n  line2          max 200\n  city           2-100\n  province       max 100\n  provinceCode   max 10\n  zip            3-20\n  country        2-100\n  countryCode    exactly 2\n  isDefault      boolean — sending `true` promotes this address and demotes\n                 the previous default, exactly like `4. Set default`\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe updated address, same shape as `1. List`:\n\nid            ← unchanged Address.id\nfirstName     ← new value if sent, otherwise the stored one\nlastName      ← new value if sent, otherwise the stored one\nphone         ← new value if sent, otherwise the stored one\nline1         ← new value if sent, otherwise the stored one\nline2         ← new value if sent, otherwise the stored one\ncity          ← new value if sent, otherwise the stored one\nprovince      ← new value if sent, otherwise the stored one\nzip           ← new value if sent, otherwise the stored one\ncountry       ← new value if sent, otherwise the stored one\ncountryCode   ← new value if sent, otherwise the stored one\nisDefault     ← Address.isDefault after the update\nimported      ← Address.importedFromOrder !== null (editing an imported\n                address does not clear this flag)\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — :id is not a UUID, or a field broke a length rule\n401 — missing or expired accessToken\n404 — no such address, OR it belongs to a different user.\n      🔒 Both cases return the same 404 on purpose. Distinguishing them\n      would let someone probe ids to discover which addresses exist."
           }
@@ -352,11 +548,22 @@
           "name": "4. Set default",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/addresses/{{addressId}}/default",
-              "host": ["{{baseUrl}}"],
-              "path": ["addresses", "{{addressId}}", "default"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "addresses",
+                "{{addressId}}",
+                "default"
+              ]
             },
             "description": "Promotes one address to be the default. No body is sent.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   `{{addressId}}` — must be a valid UUID.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsuccess   ← always `true` when the address was found and updated\n\n📌 The updated address is NOT returned. The app should either re-fetch\n`1. List` or flip the flag in its local state itself.\n\n────────────────────────────────\nBEHAVIOUR\n────────────────────────────────\nOnly one address is ever the default — the previous one is demoted in the\nsame operation, so there is never a moment with two defaults.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — :id is not a UUID\n401 — missing or expired accessToken\n404 — no such address, or it belongs to a different user"
           }
@@ -365,11 +572,21 @@
           "name": "5. Import from past orders",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/addresses/import-from-orders",
-              "host": ["{{baseUrl}}"],
-              "path": ["addresses", "import-from-orders"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "addresses",
+                "import-from-orders"
+              ]
             },
             "description": "The endpoint behind the \"Fetch my shipping addresses based on past orders\"\ncheckbox. No body — the user is identified from the accessToken.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nimported              ← how many NEW addresses were saved, after\n                        deduplication\n\nfound                 ← how many UNIQUE addresses were discovered across\n                        the past orders.\n                        📌 `found` being larger than `imported` is normal,\n                        not an error — the difference was already saved.\n                        `found: 0` means no orders were located for the\n                        user's verified identifiers.\n\nlimitedToRecentOrders ← CURRENTLY ALWAYS `true`.\n                        Without the `read_all_orders` scope, Shopify only\n                        returns orders from the LAST 60 DAYS.\n                        The app can use this flag to explain why a\n                        long-standing customer's older orders did not show\n                        up. Once that scope is approved by Shopify this can\n                        become `false`.\n\n────────────────────────────────\nWHEN TO CALL IT\n────────────────────────────────\nThe app should call this AFTER login, as its own request — never by waiting\non the `2. Verify OTP` response. Otherwise a slow Shopify makes login itself\nfeel slow.\n\n📌 This endpoint looks at PAST ORDERS ONLY. Prefer `6. Sync from Shopify`,\nwhich also pulls the customer's Shopify ADDRESS BOOK — the addresses the\nuser saved on the website without necessarily ordering from them. This one\nis kept for older app builds.\n\n────────────────────────────────\n🔒 VERIFIED IDENTIFIERS ONLY\n────────────────────────────────\nOrders are looked up ONLY by the phone numbers and emails listed in\n`verifiedIdentifiers` on `Auth / 3. Me`. The unverified email from the\nregistration screen is deliberately ignored — otherwise anyone could type a\nstranger's email and harvest their delivery addresses.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
@@ -378,11 +595,21 @@
           "name": "6. Sync from Shopify",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/addresses/sync",
-              "host": ["{{baseUrl}}"],
-              "path": ["addresses", "sync"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "addresses",
+                "sync"
+              ]
             },
             "description": "Pulls EVERYTHING address-related out of Shopify for this customer. No body —\nthe user is identified from the accessToken.\n\nTwo different sources, which are easy to confuse:\n\n  ADDRESS BOOK   the addresses the customer saved in their account on the\n                 WEBSITE. They may never have ordered from any of them.\n\n  PAST ORDERS    the shipping address attached to each historical order.\n                 Only reachable for orders in the last 60 days — see below.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nfromAddressBook       ← how many NEW addresses came from the Shopify\n                        customer address book\n\nfromPastOrders        ← how many NEW addresses came from past orders\n\nfound                 ← the customer's TOTAL saved address count after the\n                        sync. Not \"how many were discovered\" — use it to\n                        decide whether to show an empty state.\n\nlimitedToRecentOrders ← CURRENTLY ALWAYS `true`. Without the\n                        `read_all_orders` scope Shopify only returns orders\n                        from the LAST 60 DAYS. The address book half is NOT\n                        affected by this limit.\n\n📌 Both counts being 0 is normal on a second call — everything was already\nimported. Duplicates are collapsed by a normalised fingerprint, so calling\nthis repeatedly never produces copies.\n\n────────────────────────────────\nWHEN TO CALL IT\n────────────────────────────────\nUsually you DON'T have to. The server runs this automatically after\n`Identity linking / 2. Verify & link`, and that response returns\n`importedAddresses` so the app can say \"3 addresses added\".\n\nCall it explicitly for a manual \"Refresh addresses\" control on the shipping\naddress screen.\n\n────────────────────────────────\n🔒 VERIFIED IDENTIFIERS ONLY\n────────────────────────────────\nOnly Shopify records matched to a VERIFIED email or phone are read. The\nunverified email from the registration screen is deliberately ignored —\notherwise anyone could type a stranger's email and harvest their addresses.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken\n\nShopify being down does NOT produce an error here — the counts simply come\nback as 0 and the call can be retried."
           }
@@ -391,11 +618,21 @@
           "name": "7. Delete",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/addresses/{{addressId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["addresses", "{{addressId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "addresses",
+                "{{addressId}}"
+              ]
             },
             "description": "Removes an address. No body is sent.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   `{{addressId}}` — must be a valid UUID.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsuccess   ← always `true` when the address was found and removed\n\n────────────────────────────────\nBEHAVIOUR\n────────────────────────────────\nDeleting the DEFAULT address automatically promotes another one, so the user\nis never left in a state with no default. Deleting the last remaining\naddress simply leaves them with none, which is fine.\n\nThis is a hard delete, not a soft delete. Past orders are unaffected,\nbecause an order stores its own COPY of the address at the time it was\nplaced.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — :id is not a UUID\n401 — missing or expired accessToken\n404 — no such address, or it belongs to a different user"
           }
@@ -434,10 +671,18 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/products?limit=20&sort=newest",
-              "host": ["{{baseUrl}}"],
-              "path": ["products"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ],
               "query": [
-                { "key": "limit", "value": "20", "description": "1-50, default 20" },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "1-50, default 20"
+                },
                 {
                   "key": "sort",
                   "value": "newest",
@@ -449,9 +694,21 @@
                   "description": "Full-text across title, tags, vendor and product type",
                   "disabled": true
                 },
-                { "key": "tag", "value": "Silk Dupattas", "disabled": true },
-                { "key": "type", "value": "Dupatta", "disabled": true },
-                { "key": "vendor", "value": "Look & Book", "disabled": true },
+                {
+                  "key": "tag",
+                  "value": "Silk Dupattas",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "Dupatta",
+                  "disabled": true
+                },
+                {
+                  "key": "vendor",
+                  "value": "Look & Book",
+                  "disabled": true
+                },
                 {
                   "key": "cursor",
                   "value": "{{nextCursor}}",
@@ -470,11 +727,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/products?limit=20&sort=newest&cursor={{nextCursor}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["products"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ],
               "query": [
-                { "key": "limit", "value": "20" },
-                { "key": "sort", "value": "newest" },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "sort",
+                  "value": "newest"
+                },
                 {
                   "key": "cursor",
                   "value": "{{nextCursor}}",
@@ -492,10 +759,17 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/products?limit=10&search=paithani",
-              "host": ["{{baseUrl}}"],
-              "path": ["products"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ],
               "query": [
-                { "key": "limit", "value": "10" },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
                 {
                   "key": "search",
                   "value": "paithani",
@@ -513,8 +787,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/products/{{productHandle}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["products", "{{productHandle}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productHandle}}"
+              ]
             },
             "description": "A single product, with its images, options and variants.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   the product HANDLE / slug, e.g.\n      `peach-traditional-paithani-dupatta`.\n      Shopify's numeric ids never reach the app.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nEverything `List` returns (id, title, vendor, productType, tags, price,\ncompareAtPrice, priceVaries, image, inStock — all documented there), plus:\n\ndescription    ← Product.description\n                 PLAIN TEXT, not HTML.\n\nimages[]       ← every MediaImage from media(first: 15)\n                 If the product has no media list, the single featured image\n                 is used instead — so this array is only ever empty when the\n                 product has no image at all.\n                 Each entry has url, alt, width, height, mapped exactly like\n                 `image` in `List`.\n\noptions[]      ← { name, values[] }\n                 ⚠️ DERIVED FROM THE VARIANTS, not from Product.options.\n                 Two benefits: one fewer GraphQL field to pay for, and\n                 options that have no actual variant behind them never reach\n                 the app.\n                 📌 An EMPTY array means a single-variant product. The app\n                 should then hide the variant selector and show \"Add to\n                 Cart\" directly.\n                 (Shopify invents a fake \"Title: Default Title\" option for\n                 such products; it is stripped on the server.)\n\nvariants[].id  ← the variant's numeric id, with the gid:// prefix removed.\n                 ⚠️ TREAT THIS AS AN OPAQUE TOKEN. The app only ever hands\n                 it back to us (add to cart) and must never parse it. In\n                 Phase 2 its contents may change entirely without the app\n                 noticing, because the cart will live in our own Postgres.\n\nvariants[].title            ← ProductVariant.title, or `null` when it is\n                              \"Default Title\" — that is Shopify's internal\n                              placeholder, not a real name\nvariants[].sku              ← ProductVariant.sku (may be null)\nvariants[].price            ← ProductVariant.price, normalised the same way\n                              as the list price\nvariants[].compareAtPrice   ← only when higher than this variant's price,\n                              otherwise null\nvariants[].inStock          ← ProductVariant.availableForSale\n                              📌 This is per-variant and differs from the\n                              product-level flag: the product can be in\n                              stock while this particular size is sold out.\nvariants[].selectedOptions  ← [{ name, value }], with the \"Default Title\"\n                              placeholder removed\n\nupdatedAt      ← Product.updatedAt, ISO 8601\n\n────────────────────────────────\nWHY THIS QUERY IS HEAVIER\n────────────────────────────────\nVariants (up to 100) and media are requested ONLY here, never in the list\nqueries. Asking for every product's variants in a list would exhaust\nShopify's cost bucket in a single request.\n\n────────────────────────────────\nCACHE / ERRORS\n────────────────────────────────\nCached in Redis for PRODUCT_DETAIL_CACHE_TTL (default 180s).\n\n404 — unknown handle, OR the product is DRAFT or ARCHIVED.\n      Draft products are visible in the Shopify admin but must never appear\n      in the app; the Admin API returns them, so we filter them out.\n503 — Shopify unreachable"
           }
@@ -564,8 +843,12 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/collections?limit=8&sort=title",
-              "host": ["{{baseUrl}}"],
-              "path": ["collections"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "collections"
+              ],
               "query": [
                 {
                   "key": "limit",
@@ -601,11 +884,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/collections?limit=8&sort=title&cursor={{collectionCursor}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["collections"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "collections"
+              ],
               "query": [
-                { "key": "limit", "value": "8" },
-                { "key": "sort", "value": "title" },
+                {
+                  "key": "limit",
+                  "value": "8"
+                },
+                {
+                  "key": "sort",
+                  "value": "title"
+                },
                 {
                   "key": "cursor",
                   "value": "{{collectionCursor}}",
@@ -623,8 +916,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/collections/{{collectionHandle}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["collections", "{{collectionHandle}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "collections",
+                "{{collectionHandle}}"
+              ]
             },
             "description": "The header of a category page. Products are a SEPARATE endpoint, so that\nfetching just the header does not pay the cost of a full product list.\n\n────────────────────────────────\nURL\n────────────────────────────────\n:id   the collection handle, e.g. `dupattas`.\n      `{{collectionHandle}}` is saved automatically by `1. List`.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid            ← Collection.handle (a handle, never a numeric id)\ntitle         ← Collection.title\n\nimage.url     ← Collection.image.url\nimage.alt     ← Collection.image.altText (\"\" becomes null)\nimage.width   ← Collection.image.width\nimage.height  ← Collection.image.height\n                The whole object is `null` when no image is set.\n\nproductCount  ← Collection.productsCount.count\n                ⚠️ Includes draft and archived products, unlike\n                `4. Products in collection`.\n\nupdatedAt     ← Collection.updatedAt, ISO 8601\n\ndescription   ← Collection.description\n                PLAIN TEXT, not HTML. Shopify's `descriptionHtml` is\n                deliberately not sent — the app should not have to embed a\n                WebView or an HTML parser to render a category header.\n                An empty description comes back as `\"\"`, never `null`.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n404 — unknown handle, or the collection does not exist in Shopify.\n      📌 An EMPTY collection is NOT a 404 — it returns 200 with\n      `productCount: 0`. The app should distinguish \"this category does not\n      exist\" from \"this category has nothing in it yet\".\n503 — Shopify unreachable"
           }
@@ -666,10 +964,20 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/collections/{{collectionHandle}}/products?limit=20&sort=manual",
-              "host": ["{{baseUrl}}"],
-              "path": ["collections", "{{collectionHandle}}", "products"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "collections",
+                "{{collectionHandle}}",
+                "products"
+              ],
               "query": [
-                { "key": "limit", "value": "20", "description": "1-50, default 20" },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "1-50, default 20"
+                },
                 {
                   "key": "sort",
                   "value": "manual",
@@ -693,10 +1001,19 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/collections/{{collectionHandle}}/products?limit=20&sort=price_asc",
-              "host": ["{{baseUrl}}"],
-              "path": ["collections", "{{collectionHandle}}", "products"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "collections",
+                "{{collectionHandle}}",
+                "products"
+              ],
               "query": [
-                { "key": "limit", "value": "20" },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
                 {
                   "key": "sort",
                   "value": "price_asc",
@@ -705,6 +1022,440 @@
               ]
             },
             "description": "📌 THIS IS NOT AVAILABLE ON `/products`.\n\nShopify's Admin API has no price sort key on the top-level `products`\nconnection, but it does have one on `Collection.products`. So:\n\n  /products?sort=price_asc                    ❌ 400\n  /collections/:id/products?sort=price_asc    ✅ works\n\nOffer \"Price: low to high\" on category pages only for now. On the global\nproduct list it arrives in Phase 2, once products come from Postgres.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nsort     price_asc  → cheapest first  (Shopify PRICE, ascending)\n         price_desc → dearest first   (Shopify PRICE, descending)\nlimit    1-50, default 20\ncursor   max 512 characters\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nSame shape as `4. Products in collection`:\n\nitems[].id             ← Product.handle\nitems[].title          ← Product.title\nitems[].vendor         ← Product.vendor\nitems[].productType    ← Product.productType\nitems[].tags           ← Product.tags\nitems[].price          ← priceRangeV2.minVariantPrice, normalised to the\n                         currency's decimal count\nitems[].compareAtPrice ← compareAtPriceRange.maxVariantCompareAtPrice, only\n                         when higher than the price\nitems[].priceVaries    ← minVariantPrice !== maxVariantPrice\nitems[].image          ← featuredMedia (url / alt / width / height), or null\nitems[].inStock        ← tracksInventory false → true, else totalInventory > 0\nnextCursor             ← products.pageInfo.endCursor, null when finished\nhasNextPage            ← products.pageInfo.hasNextPage\n\n⚠️ Shopify sorts by the variant price it selects internally, while the card\nshows the CHEAPEST variant. For products whose variants differ in price\n(`priceVaries: true`) the displayed order can therefore look slightly off.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — unknown sort value or limit out of range\n404 — the collection does not exist\n503 — Shopify unreachable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "1. List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Past orders of the signed-in user, newest first.\n\n--------------------------------\nWHERE THE DATA COMES FROM\n--------------------------------\n\nOrders live in Shopify, not in our database. We look them up by the\nShopify customer records linked to this account (ShopifyCustomerLink),\nand those links are only created from a VERIFIED phone or email.\n\nSo a brand-new account sees an empty list until it verifies an email\nthat matches an older Shopify customer.\n\n--------------------------------\nIF THE LIST IS EMPTY BUT SHOULD NOT BE\n--------------------------------\n\n1. Run the \"Identity linking\" requests with the old email.\n2. Check that the store granted the read_all_orders scope:\n     npm run shopify:scopes\n   Without it Shopify only returns the last 60 days of orders.\n\n--------------------------------\nQUERY PARAMS\n--------------------------------\n\n  limit    1-50, default 20\n  cursor   the previous response's nextCursor, for the next page"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "// Save the first order id so the detail request can target it.",
+                  "if (res.items && res.items.length) {",
+                  "  pm.collectionVariables.set('orderId', res.items[0].id);",
+                  "  console.log('orderId saved:', res.items[0].id);",
+                  "}",
+                  "",
+                  "if (res.nextCursor) {",
+                  "  pm.collectionVariables.set('orderCursor', res.nextCursor);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            },
+            "description": "One order: line items, totals, shipping address and tracking.\n\n--------------------------------\nTHE :id IS THE ORDER NAME\n--------------------------------\n\nUse the order number without the \"#\" - for example PBG1036. That is\nthe number printed on the receipt, so support can use it too.\nShopify's internal numeric ids never leave the server.\n\n--------------------------------\nIF YOU GET 404\n--------------------------------\n\nEither the order does not exist, or it belongs to someone else. Both\nreturn the same 404 on purpose: replying \"this order exists but is\nnot yours\" would let anyone probe order numbers."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "1. Get cart",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart"
+              ]
+            },
+            "description": "The signed-in user's cart.\n\nThe cart lives in OUR database, not in Shopify. That is why it\nsurvives a reinstall and follows the user to another device.\n\n--------------------------------\nSUBTOTAL IS NOT THE FINAL AMOUNT\n--------------------------------\n\nsubtotal is only the sum of the lines. Shipping, tax and discounts\nare calculated by Shopify at checkout. Label it \"Subtotal\" in the\napp, never \"Total\" - otherwise the customer sees one number here and\na different one at payment."
+          }
+        },
+        {
+          "name": "2. Add item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productHandle}}\",\n  \"variantId\": \"{{variantId}}\",\n  \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "items"
+              ]
+            },
+            "description": "Adds a variant to the cart. This is the \"ADD TO CART\" button.\n\n--------------------------------\nBODY\n--------------------------------\n\n  productId   product handle, same value used by GET /products/:id\n  variantId   a variants[].id from the product detail response\n  quantity    1-20, defaults to 1\n\nAdding the same variant again increases its quantity instead of\ncreating a second line.\n\n--------------------------------\nERRORS\n--------------------------------\n\n  404  \"This option is no longer available\"  not on the product\n  400  \"This option is out of stock\"         sold out\n\nThe stock check here is an early warning, not the final word. Our\nstock data can be slightly stale; Shopify's checkout decides."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "// Save a line id so update / remove can target it.",
+                  "if (res.items && res.items.length) {",
+                  "  pm.collectionVariables.set('cartItemId', res.items[0].id);",
+                  "  console.log('cartItemId saved:', res.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Update quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/{{cartItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "items",
+                "{{cartItemId}}"
+              ]
+            },
+            "description": "Changes the quantity of one cart line - the +/- buttons.\n\nquantity must be 1-20. To remove a line use the delete request\nrather than setting quantity to 0.\n\nReturns 404 if the line does not exist or belongs to another user."
+          }
+        },
+        {
+          "name": "4. Remove item",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/{{cartItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "items",
+                "{{cartItemId}}"
+              ]
+            },
+            "description": "Removes one line from the cart.\n\nReturns 404 if the line does not exist or belongs to another user."
+          }
+        },
+        {
+          "name": "5. Apply voucher",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"WELCOME10\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cart/discount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "discount"
+              ]
+            },
+            "description": "Saves a discount code on the cart.\n\n--------------------------------\nTHE CODE IS NOT VALIDATED HERE\n--------------------------------\n\nWe only store it. Whether it is valid, still active, or applies to\nthese products is decided by Shopify at checkout.\n\nThis is deliberate. Re-implementing Shopify's discount rules (minimum\namount, specific collections, usage limits, dates) would eventually\ndisagree with Shopify - and then the app shows one price while the\ncustomer is charged another."
+          }
+        },
+        {
+          "name": "6. Remove voucher",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/discount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "discount"
+              ]
+            },
+            "description": "Clears the discount code from the cart."
+          }
+        },
+        {
+          "name": "7. Clear cart",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart"
+              ]
+            },
+            "description": "Removes every line.\n\nThe cart row itself stays, so the user keeps the same cart."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checkout",
+      "item": [
+        {
+          "name": "1. Start checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "checkout"
+              ]
+            },
+            "description": "Hands the cart to Shopify and returns a checkout URL.\n\n--------------------------------\nWHAT THE APP DOES WITH checkoutUrl\n--------------------------------\n\nOpen it with Shopify's Checkout Sheet Kit - NOT in a browser. The\nsheet looks native and the customer never leaves the app. UPI, cards,\nnetbanking and COD all appear inside it.\n\nShopify creates the order, so it shows up in the admin, on the\nwebsite, and in GET /orders.\n\n--------------------------------\nRESPONSE\n--------------------------------\n\n  checkoutUrl   open this in the Checkout Sheet\n  cartToken     Shopify cart id, for support and debugging only\n  itemCount     total quantity, useful as a sanity check\n\n--------------------------------\nHOW THE ORDER GETS ATTACHED TO THE ACCOUNT\n--------------------------------\n\nWe send the customer's VERIFIED email or phone as the buyer identity.\nWithout it Shopify creates a guest order with no customer, and\nGET /orders would never show it - the customer would pay and then\nsee \"no orders yet\".\n\n--------------------------------\nERRORS\n--------------------------------\n\n  400  \"Your cart is empty\"\n  400  a message from Shopify (for example an item went out of stock)\n  503  Shopify is unreachable - safe to retry"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wishlist",
+      "item": [
+        {
+          "name": "1. List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wishlist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wishlist"
+              ]
+            },
+            "description": "Saved products, newest first.\n\nWe store only the product handle, never a copy of the product.\nPrices and stock change, and showing a stale price in the wishlist\nis unfair to the customer - so products are fetched fresh on read.\n\nA product that was deleted from the store is skipped silently rather\nthan failing the whole list."
+          }
+        },
+        {
+          "name": "2. Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wishlist/{{productHandle}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wishlist",
+                "{{productHandle}}"
+              ]
+            },
+            "description": "Adds a product to the wishlist. The path segment is the handle.\n\nAdding twice is not an error - the response says added: false, so a\ndouble tap on the heart icon does nothing surprising."
+          }
+        },
+        {
+          "name": "3. Remove",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wishlist/{{productHandle}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wishlist",
+                "{{productHandle}}"
+              ]
+            },
+            "description": "Removes a product from the wishlist.\n\nRemoving something that is not there is not an error - the end state\nis what was asked for. The response says removed: false."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recently viewed",
+      "item": [
+        {
+          "name": "1. List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recently-viewed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recently-viewed"
+              ]
+            },
+            "description": "The last 20 products this user opened, newest first."
+          }
+        },
+        {
+          "name": "2. Record a view",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recently-viewed/{{productHandle}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recently-viewed",
+                "{{productHandle}}"
+              ]
+            },
+            "description": "Called when the app opens a product page. Returns 204 with no body.\n\nThe app should not wait for this call before showing the product.\n\nViewing the same product again moves it to the top instead of adding\na duplicate, and anything past the newest 20 is trimmed."
           }
         }
       ]

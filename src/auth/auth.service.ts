@@ -222,13 +222,19 @@ export class AuthService {
    */
   async updateProfile(
     customerId: string,
-    data: { firstName?: string; lastName?: string; email?: string },
+    data: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      gender?: string;
+    },
   ): Promise<CustomerProfileDto> {
     await this.prisma.customer.update({
       where: { id: customerId },
       data: {
         ...(data.firstName !== undefined && { firstName: data.firstName }),
         ...(data.lastName !== undefined && { lastName: data.lastName }),
+        ...(data.gender !== undefined && { gender: data.gender }),
         ...(data.email !== undefined && {
           contactEmail: data.email.trim().toLowerCase(),
         }),

@@ -29,6 +29,8 @@ export interface CustomerProfileDto {
   phoneVerified: boolean;
   firstName: string | null;
   lastName: string | null;
+  /** Screen 36 — app j nakki kare chhe ke kaya vikalpo batavva */
+  gender: string | null;
   hasPassword: boolean;
   /** Aa user na badha verified email/phone */
   verifiedIdentifiers: Array<{ type: 'PHONE' | 'EMAIL'; value: string }>;
@@ -72,6 +74,7 @@ export function toCustomerProfileDto(
     phoneVerified,
     firstName: customer.firstName,
     lastName: customer.lastName,
+    gender: customer.gender,
     hasPassword: Boolean(customer.passwordHash),
     verifiedIdentifiers: identities.map((i) => ({
       type: i.type,

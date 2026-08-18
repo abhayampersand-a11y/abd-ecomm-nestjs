@@ -1,7 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 import { ShopifyAddressService } from './shopify-address.service';
+import { ShopifyCheckoutService } from './shopify-checkout.service';
 import { ShopifyCustomerService } from './shopify-customer.service';
 import { ShopifyGraphqlClient } from './shopify-graphql.client';
+import { ShopifyOrderService } from './shopify-order.service';
+import { ShopifyStorefrontClient } from './shopify-storefront.client';
 import { ShopifyTokenService } from './shopify-token.service';
 
 /**
@@ -18,12 +21,18 @@ import { ShopifyTokenService } from './shopify-token.service';
     ShopifyGraphqlClient,
     ShopifyCustomerService,
     ShopifyAddressService,
+    ShopifyOrderService,
+    ShopifyStorefrontClient,
+    ShopifyCheckoutService,
   ],
   exports: [
     ShopifyTokenService,
     ShopifyGraphqlClient,
     ShopifyCustomerService,
     ShopifyAddressService,
+    ShopifyOrderService,
+    ShopifyStorefrontClient,
+    ShopifyCheckoutService,
   ],
 })
 export class ShopifyModule {}

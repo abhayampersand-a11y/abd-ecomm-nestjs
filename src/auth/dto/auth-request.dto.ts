@@ -72,6 +72,16 @@ export class UpdateProfileDto {
   @IsEmail({}, { message: 'Email is not valid' })
   @MaxLength(255)
   email?: string;
+
+  /**
+   * Screen 36 nu "Additional Information → Gender".
+   * Jaan-bujhi ne khullo String — kaya vikalpo batavva e app nakki kare chhe,
+   * server e fakt saachvvanu chhe.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  gender?: string;
 }
 
 export class LogoutDto {

@@ -404,6 +404,44 @@ export class IdentityService {
       where: { id: customerId, shopifyCustomerId: null },
       data: { shopifyCustomerId: primary.shopifyCustomerId },
     });
+
+    await this.backfillNameFromShopify(customerId, primary);
+  }
+
+  /**
+   * Shopify na record parthi naam bhare chhe — jethi juno grahak phone thi
+   * login kare ke tarat "Namaste, Vivek" dekhaay, ene fari type karya vagar.
+   *
+   * ⚠️ FAKT KHAALI JAGYA BHARE CHHE, kyarey overwrite nathi karto.
+   *
+   * Bharoso na tran star chhe:
+   *   1. User e app ma jate type karyu  → sauthi vadhu (aa j atyare bethelo
+   *      vyakti chhe, ane ene jaate lakhyu chhe)
+   *   2. Shopify customer record        → aa — fakt local khaali hoy tyare
+   *   3. Order nu shipping address      → sauthi ochho, etle ahiya vaparato
+   *      j nathi (gift order ma bija nu naam hoy chhe)
+   *
+   * `updateMany` + `where: { firstName: null }` — aa race-safe chhe. Ek j
+   * kshan e user profile save kare ane aa chale, to pan user nu j rahese:
+   * DB pote nakki kare chhe, aapne pehla vaanchi ne pachhi lakhta nathi.
+   */
+  private async backfillNameFromShopify(
+    customerId: string,
+    primary: ShopifyCustomerMatch,
+  ): Promise<void> {
+    if (primary.firstName) {
+      await this.prisma.customer.updateMany({
+        where: { id: customerId, firstName: null },
+        data: { firstName: primary.firstName },
+      });
+    }
+
+    if (primary.lastName) {
+      await this.prisma.customer.updateMany({
+        where: { id: customerId, lastName: null },
+        data: { lastName: primary.lastName },
+      });
+    }
   }
 
   /**

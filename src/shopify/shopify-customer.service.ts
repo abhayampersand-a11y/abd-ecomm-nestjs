@@ -18,6 +18,13 @@ export interface ShopifyCustomerMatch {
   shopifyCustomerId: string;
   email: string | null;
   phone: string | null;
+  /**
+   * ⚠️ Aa fakt tyare vaparvu jyare aapdi pase kai j na hoy.
+   * User e app ma jate type karelu naam hammesha jite chhe — juo
+   * `IdentityService.setPrimaryShopifyCustomer()`.
+   */
+  firstName: string | null;
+  lastName: string | null;
   orderCount: number;
 }
 
@@ -58,6 +65,8 @@ export class ShopifyCustomerService {
         shopifyCustomerId: idFromGid(c.id),
         email: c.email,
         phone: c.phone,
+        firstName: c.firstName,
+        lastName: c.lastName,
         orderCount: Number(c.numberOfOrders ?? 0),
       }));
   }
@@ -263,7 +272,8 @@ export class ShopifyCustomerService {
     if (identifier.type === 'EMAIL') {
       return customer.email?.toLowerCase() === identifier.value;
     }
-    return normalizePhone(customer.phone) === normalizePhone(identifier.value);
+    const a = phoneKey(customer.phone);
+    return a !== null && a === phoneKey(identifier.value);
   }
 }
 
@@ -272,9 +282,35 @@ function idFromGid(gid: string): string {
   return gid.split('/').pop() ?? gid;
 }
 
-/** Shopify ma phone kyarek "+91 98765 43210" hoy chhe — digits j compare karo */
-function normalizePhone(phone: string | null): string | null {
-  return phone ? phone.replace(/\D/g, '') : null;
+/** Bharat ma subscriber number 10 digit no — country code ane leading 0 ni bahar */
+const SUBSCRIBER_DIGITS = 10;
+
+/**
+ * Phone ne sarkhaavva mate ek j swaroop ma laave chhe.
+ *
+ * ⚠️ Fakt digits kaadhi naakhvu PURATU NATHI — ane aa j pehla bug hato.
+ * Aapdi pase hammesha E.164 hoy chhe (`+916352434438` → `916352434438`), pan
+ * Shopify ma merchant e je type karyu hoy e — `6352434438`, `09876543210`,
+ * `+91 98765 43210`. Digits sarkhaavso to `916352434438 !== 6352434438` aavse
+ * ane E J VYAKTI na male — juna grahak ne navo ganine duplicate bani jaay.
+ *
+ * Etle chhella 10 digit par j compare kariye chhiye. Aa thi country code ane
+ * leading 0, banne no farak nikli jaay chhe.
+ *
+ * ⚠️ Trade-off: be alag desh na number na chhella 10 digit sarkha hoy to
+ * khoto match thay. Aa store bharat purtu j chhe (`DEFAULT_COUNTRY_CODE=IN`)
+ * etle sweekaryu chhe. Multi-country thavu hoy tyare country code alag thi
+ * sarkhaavvo padse.
+ */
+function phoneKey(phone: string | null): string | null {
+  if (!phone) return null;
+
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+
+  return digits.length > SUBSCRIBER_DIGITS
+    ? digits.slice(-SUBSCRIBER_DIGITS)
+    : digits;
 }
 
 function quote(value: string): string {

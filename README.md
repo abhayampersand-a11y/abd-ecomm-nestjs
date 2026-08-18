@@ -138,6 +138,110 @@ Query params: `limit` (1–50), `cursor`, `search`, `type`, `vendor`, `tag`,
 > `price_asc`/`price_desc` ummerashe — fakt `DbProductRepository` ma, mobile
 > app ma ek line pan badlava vagar.
 
+### Orders
+
+| Method | Route | Auth | Kaam |
+|---|---|---|---|
+| GET | `/orders` | ✅ | Potana orders, navo pehla, cursor pagination |
+| GET | `/orders/:id` | ✅ | Detail (`:id` = order name `#` vagar) |
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "localhost:3001/api/v1/orders?limit=20"
+curl -H "Authorization: Bearer $TOKEN" "localhost:3001/api/v1/orders/PBG1036"
+```
+
+`:id` e order nu naam chhe (`PBG1036`) — e j je grahak ni rasid par chhape
+chhe. Products ma handle vaparyo, ahiya order name: Shopify na numeric ids
+server ni bahar kyarey nathi jata.
+
+> **Security — aa module ma be layer chhe.** `customerId` hammesha token
+> mathi j aave chhe, ane orders fakt e `shopifyCustomerId` na j male chhe je
+> **verified** identifier parthi jodaya hoy (`ShopifyCustomerLink`). Query ma
+> `customer_id:` filter to chhe j, pan `ShopifyOrderService` javaab aavya
+> pachhi **fari** check kare chhe — karan ke Shopify no search fuzzy chhe
+> (e j paath `ShopifyCustomerService.actuallyMatches()` ma pan chhe).
+>
+> Bija no order maangso to `404 Order not found` male chhe, `403` nahi —
+> "aa order chhe pan tamaro nathi" evu kehvu pan ek leak chhe.
+
+> **⚠️ `read_all_orders` vagar fakt 60 divas na orders male chhe.** Navi
+> jagya e deploy karo tyare `npm run shopify:scopes` sauthi pehla chalavvu.
+
+### Cart
+
+| Method | Route | Auth | Kaam |
+|---|---|---|---|
+| GET | `/cart` | ✅ | Aakho cart |
+| POST | `/cart/items` | ✅ | Add to cart |
+| PATCH | `/cart/items/:id` | ✅ | Quantity badalvu |
+| DELETE | `/cart/items/:id` | ✅ | Line kaadhvi |
+| DELETE | `/cart` | ✅ | Cart khali karvo |
+| POST | `/cart/discount` | ✅ | Voucher lagaadvo |
+| DELETE | `/cart/discount` | ✅ | Voucher kaadhvo |
+
+Cart **aapdo potano chhe** — Postgres ma, Shopify ma nahi. Kem: Shopify no cart
+Storefront API ni session par ubho chhe; aapno DB ma hoy to user app fari
+install kare ke bija phone par login kare, cart tya no tya rahe chhe.
+
+Dar method **aakho cart** pacho aape chhe (fakt badlayeli line nahi), jethi app
+ne subtotal ane badge mate biji call na karvi pade.
+
+> **⚠️ `subtotal` e final rakam NATHI.** Fakt lines no saravalo chhe. Shipping,
+> tax ane discount **Shopify checkout** ganse. App ma ene "Subtotal" j kehvu,
+> "Total" kyarey nahi — nahi to grahak ne checkout ma biji rakam dekhaay ane
+> bharoso tooti jaay.
+>
+> E j kaarane `POST /cart/discount` code ne **fakt saachve chhe**, valid chhe ke
+> nahi e nathi joto. Shopify na discount niyamo (min amount, aa collection j,
+> tarikh) ahiya fari lakhso to ek din mel nahi khaay.
+
+### Checkout
+
+| Method | Route | Auth | Kaam |
+|---|---|---|---|
+| POST | `/checkout` | ✅ | Cart → Shopify → `checkoutUrl` |
+
+```json
+{ "checkoutUrl": "https://paithanic.com/cart/c/…", "cartToken": "gid://…", "itemCount": 2 }
+```
+
+App e `checkoutUrl` **Checkout Sheet Kit** ma kholvu — browser ma nahi, nahi to
+grahak app ni bahar nikli jaay chhe ane pacho nathi aavto. Sheet ma UPI, card,
+netbanking ane COD — badhu Shopify sambhale chhe, ane **order Shopify ma j bane
+chhe** (etle admin ane website banne ma dekhaay chhe).
+
+Aa **Storefront API** vaapre chhe — `SHOPIFY_STOREFRONT_TOKEN`, je Admin
+credentials thi **taddan alag** chhe (alag endpoint, alag header, ane aa token
+expire nathi thato).
+
+> **⚠️ `buyerIdentity` j aa aakha endpoint no jeev chhe.**
+>
+> E vagar order **guest order** tarike banse — `order.customer` null hase — ane
+> `GET /orders` ene **kyarey nahi batave** (e `customer_id:` par filter kare chhe).
+> Etle grahak na paisa jaay, order Shopify ma hoy, ane app ma "no orders yet"
+> dekhaay.
+>
+> Ahiya **fakt verified** value j jaay chhe (`primaryEmail` / `primaryPhone`) —
+> `contactEmail` kyarey nahi, nahi to grahak bija no email type kare ane eno
+> order bija na account ma chadi jaay.
+
+### Wishlist ane recently viewed
+
+| Method | Route | Auth | Kaam |
+|---|---|---|---|
+| GET | `/wishlist` | ✅ | Wishlist (product summaries) |
+| POST | `/wishlist/:productId` | ✅ | Ummervu (`productId` = handle) |
+| DELETE | `/wishlist/:productId` | ✅ | Kaadhvu |
+| GET | `/recently-viewed` | ✅ | Chhella 20 |
+| POST | `/recently-viewed/:productId` | ✅ | Product page khulyu — 204 |
+
+Shopify ma aa concept **j nathi** (na wishlist, na browsing history), etle aa
+Phase 2 ma pan aapda DB ma j rahese.
+
+Aapne fakt `productHandle` saachviye chhiye, aakhu product nahi — bhaav ane
+stock badlaata rahe chhe, ane wishlist ma juno bhaav batavvo grahak sathe
+anyaay chhe.
+
 ---
 
 ## Shopify setup
@@ -309,16 +413,44 @@ bija record ma merge) · `BLOCKED`
 
 ---
 
+## Deploy
+
+⚠️ **Migration jate NATHI chalti.** Aa repo ma Dockerfile ke CI config nathi,
+`start:prod` fakt `node dist/main` chhe, ane `PrismaService` fakt `$connect()`
+kare chhe. Etle deploy na dar step ma migration **jate** chalavvi padse:
+
+```bash
+npm ci
+npm run build
+npm run prisma:deploy        # ⚠️ prisma:migrate NAHI — e `migrate dev` chhe
+npm run start:prod
+```
+
+**Migration chukаi jaay to shu thay:** app boot thai jashe ane logs saaf hashe —
+Prisma schema check nathi karto. Error tyare aavse jyare grahak endpoint hit
+kare (`table "carts" does not exist`). Etle deploy safal dekhaay ane bhaangelu
+hoy — sauthi kharaab combination.
+
+**Dar deploy pehla env check karo:**
+
+| Key | Kem |
+|---|---|
+| `SHOPIFY_STOREFRONT_TOKEN` | Aa vagar app boot thashe pan **checkout fail thashe**. Store-specific chhe — biju store, bijo token. |
+| `OTP_EXPOSE_IN_RESPONSE` | Production ma `false`. `true` hoy to app **boot j nahi thay** (guard chhe) — e jaan-bujhi ne chhe. |
+| `DATABASE_URL` `REDIS_URL` `JWT_ACCESS_SECRET` `OTP_PEPPER` | Aa chaar ma default nathi — na hoy to boot fail. |
+
+Baaki na 28 env keys ma default chhe.
+
+---
+
 ## Have pachhi (order matters)
 
-1. **`read_all_orders` scope Shopify pase thi aaje request karo.** Default ma app
-   ne fakt **chhella 60 divas** na orders male chhe. Approval ma time lage chhe —
-   Phase 2 ma khabar padshe to weeks atki jashe. Same rite **protected customer
-   data** access pan check kari lo.
-2. Collections (category browsing) — products jevo j pattern
-3. Cart Postgres ma (aapno potano — checkout time e Storefront API thi
+1. ~~`read_all_orders` scope~~ ✅ **thai gayu** — approval joityu j nahi
+   (potana store ni app hati). `npm run shopify:scopes` thi verify thay chhe.
+2. ~~Collections (category browsing)~~ ✅
+3. ~~Orders read + `ShopifyCustomerLink` thi filter~~ ✅ — juo `src/orders/`
+4. Cart Postgres ma (aapno potano — checkout time e Storefront API thi
    `checkoutUrl` levu ane app ma kholvu)
-4. Orders read + `ShopifyCustomerLink` thi filter
 5. Real OTP sender (MSG91)
 6. **Phase 2**: Bulk Operations API import → `shopify_customers` mirror →
    `IdentityService.linkShopifyRecords()` nu body bharvu (call sites already
@@ -329,7 +461,9 @@ bija record ma merge) · `BLOCKED`
 ## Scripts
 
 ```bash
+npm run shopify:scopes   # Shopify e KHAREKHAR aapela scopes (read_all_orders?)
 npm run shopify:verify   # Shopify connection + queries check
+npm run prisma:deploy    # PRODUCTION ni migration (migrate deploy)
 npm run start:dev        # watch mode
 npm run db:up            # docker compose up -d
 npx prisma studio        # DB GUI

@@ -62,6 +62,18 @@ export const envSchema = z.object({
   SHOPIFY_CLIENT_SECRET: z.string().optional().default(''),
 
   /**
+   * Storefront API token — cart ane checkout mate.
+   *
+   * ⚠️ Aa upar na Admin credentials thi TADDAN ALAG chhe. Admin API store
+   * chalavva mate chhe (products, orders vaanchvа); Storefront API grahak na
+   * cart ane checkout mate. Endpoint alag, header alag, token alag.
+   *
+   * `storefrontAccessTokenCreate` mutation thi bane chhe (Admin API thi),
+   * ane e expire nathi thato — etle `.env` ma sidho mukay chhe.
+   */
+  SHOPIFY_STOREFRONT_TOKEN: z.string().optional().default(''),
+
+  /**
    * App ma signup thay etle Shopify ma pan customer banaavvo?
    *
    * true  → app no user Shopify admin ma dekhaay, ane (email verify thay
@@ -89,6 +101,18 @@ export const envSchema = z.object({
   // categories row dar vakhte Shopify sudhi na jaay.
   COLLECTION_LIST_CACHE_TTL: z.coerce.number().int().positive().default(600),
   COLLECTION_DETAIL_CACHE_TTL: z.coerce.number().int().positive().default(600),
+
+  /**
+   * Orders no cache TTL ટૂંકો j rakhvo.
+   *
+   * Order nu status badlaay chhe — "Unfulfilled" mathi "Fulfilled", tracking
+   * number aave. Grahak parcel ni raah joto hoy tyare vaar vaar kholshe, ane
+   * 5 minute juno status batavso to e vichaarse ke app kaam nathi karti.
+   *
+   * Cache atyare fakt Shopify na cost-based rate limit mate chhe (order
+   * queries nested lineItems sathe bhaari chhe), speed mate nahi.
+   */
+  ORDER_LIST_CACHE_TTL: z.coerce.number().int().positive().default(60),
 });
 
 export type Env = z.infer<typeof envSchema>;

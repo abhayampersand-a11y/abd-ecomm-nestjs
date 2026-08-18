@@ -76,6 +76,12 @@ model Customer {
   firstName String?
   lastName  String?
 
+  /// Screen 36 nu "Additional Information → Gender".
+  /// Jaan-bujhi ne enum nahi pan free String — gender na vikalpo desh ane
+  /// samay sathe badlaay chhe, ane enum badalvo etle migration. App j nakki
+  /// kare ke kaya vikalpo batavvа.
+  gender String?
+
   /// Optional! OTP-only users mate aa null j rahe chhe.
   /// Shopify na password hashes kyarey nathi malta — etle aa aapdo potano chhe.
   passwordHash String?
@@ -98,12 +104,15 @@ model Customer {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  identities    CustomerIdentity[]
-  shopifyLinks  ShopifyCustomerLink[]
-  refreshTokens RefreshToken[]
-  deviceTokens  DeviceToken[]
-  otpCodes      OtpCode[]
-  addresses     Address[]
+  identities     CustomerIdentity[]
+  shopifyLinks   ShopifyCustomerLink[]
+  refreshTokens  RefreshToken[]
+  deviceTokens   DeviceToken[]
+  otpCodes       OtpCode[]
+  addresses      Address[]
+  cart           Cart?
+  wishlist       WishlistItem[]
+  recentlyViewed RecentlyViewed[]
 
   @@index([status])
   @@map("customers")
@@ -313,4 +322,111 @@ model DeviceToken {
 
   @@index([customerId])
   @@map("device_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Cart — AAPDO POTANO, Shopify ma nahi
+//
+// Kem aapdo: Shopify no cart Storefront API ma chhe ane e session-based chhe.
+// Aapno cart DB ma hoy to user phone badle, app fari install kare, ke web
+// parthi aave — cart tya no tya rahe chhe. Ane checkout vakhte j Shopify ne
+// mokliye chhiye.
+// ---------------------------------------------------------------------------
+
+model Cart {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Ek grahak no ek j cart. (Guest cart aage vadhe tyare aa nullable karvu
+  /// padse ane deviceId ummervu — atyare login farjiyat chhe.)
+  customerId String   @unique @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Screen 13 no voucher. Ahiya fakt SAACHVIYE chhiye — valid chhe ke nahi
+  /// e Shopify j nakki kare chhe, checkout vakhte. Aapne jate discount
+  /// KYAREY na ganvo, nahi to app ek rakam batave ane checkout biji.
+  discountCode String?
+
+  items CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("carts")
+}
+
+model CartItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  cartId String @db.Uuid
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  /// Shopify no variant id (numeric, gid nahi). Cart ma AA J asli identifier
+  /// chhe — ek j product ni be size alag lines chhe.
+  variantId String
+
+  /// Product no handle — app ne product page par lai javu hoy to. Variant id
+  /// parthi handle kaadhvo mongho chhe, etle sathe j saachvie chhiye.
+  productHandle String
+
+  quantity Int
+
+  /// ⚠️ AA FIELDS FAKT DEKHAADVA MATE CHHE — bhaav no faislo aa nathi.
+  ///
+  /// Cart kholo etle turat kai batavvu pade, ane dar item mate Shopify ne
+  /// puchhvu bahu mongu chhe. Etle add karti vakhte ni nakal ahiya rakhiye
+  /// chhiye.
+  ///
+  /// Asli bhaav Shopify checkout ganse. Product mirror (Phase 2) aavi jaay
+  /// pachhi GET /cart ee Product table sathe join karse ane aa fields fakt
+  /// fallback rahese.
+  title         String
+  variantTitle  String?
+  imageUrl      String?
+  priceAmount   String
+  priceCurrency String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// E j variant fari add thay to navi line nahi — quantity vadhe chhe
+  @@unique([cartId, variantId])
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+// ---------------------------------------------------------------------------
+// Wishlist ane RecentlyViewed — Shopify ma aa concept j nathi
+// ---------------------------------------------------------------------------
+
+model WishlistItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Handle j raakhiye chhiye, variant nahi — user ne "aa dress gami" chhe,
+  /// "aa dress size M ma" nahi.
+  productHandle String
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerId, productHandle])
+  @@index([customerId])
+  @@map("wishlist_items")
+}
+
+model RecentlyViewed {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  productHandle String
+
+  /// Fari joyu to navi row nahi — aa j update thay chhe (juo @@unique)
+  viewedAt DateTime @default(now())
+
+  @@unique([customerId, productHandle])
+  @@index([customerId, viewedAt])
+  @@map("recently_viewed")
 }

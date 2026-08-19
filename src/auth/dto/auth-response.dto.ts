@@ -19,11 +19,9 @@ export interface AuthTokensDto {
 export interface CustomerProfileDto {
   id: string;
   phone: string | null;
-  /** Sauthi bharoso paatra email — verified hoy e, nahi to registration vaalo */
-  email: string | null;
   /**
    * `false` hoy to app "Verify your email to see older orders" batavi shake.
-   * Un-verified email order matching ma kyarey nathi vaparato.
+   * Verified email nu value `verifiedIdentifiers` ma thi lo.
    */
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -68,8 +66,6 @@ export function toCustomerProfileDto(
   return {
     id: customer.id,
     phone: customer.primaryPhone,
-    // Verified email hoy to e, nahi to registration screen vaalo (un-verified)
-    email: customer.primaryEmail ?? customer.contactEmail,
     emailVerified,
     phoneVerified,
     firstName: customer.firstName,

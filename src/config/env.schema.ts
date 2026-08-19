@@ -50,6 +50,74 @@ export const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
 
+  // ---------------------------------------------------------------------------
+  // Admin panel — EK j admin user chhe, roles nathi.
+  //
+  // Etle credentials DB ma nahi pan env ma j chhe: koi admin-users table, koi
+  // seed script, koi "forgot password" flow — kai j nahi. Password badalvo hoy
+  // to navo hash banaavi ne deploy karvano:  npm run admin:hash
+  // ---------------------------------------------------------------------------
+
+  /** Khaali rakho to aakhu /admin/* band rahe chhe (fail-closed). */
+  ADMIN_EMAIL: z.string().optional().default(''),
+
+  /** Argon2id hash. Banaavva mate: npm run admin:hash */
+  ADMIN_PASSWORD_HASH: z.string().optional().default(''),
+
+  /**
+   * FAKT local development mate — plain password, hash vagar.
+   * Production ma aa set karso to app boot j nahi thay (juo validateEnv).
+   */
+  ADMIN_PASSWORD: z.string().optional().default(''),
+
+  /**
+   * ⚠️ JWT_ACCESS_SECRET thi ALAG j hovo joiye.
+   *
+   * Ek j secret raakhso to grahak no access token admin routes par pan chaali
+   * jashe — vachche fakt payload no `typ` field ubho rahe chhe, ane ek din
+   * koi e check bhuli jashe.
+   */
+  JWT_ADMIN_SECRET: z.string().optional().default(''),
+
+  /** Admin session ni lambai. Refresh token nathi — pachhi fari login. */
+  JWT_ADMIN_TTL: z.coerce.number().int().positive().default(28800),
+
+  /** Aatla khota password pachhi e IP par thi login lock thai jaay chhe. */
+  // ---------------------------------------------------------------------------
+  // App content (CMS) ane push notifications
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Home layout, banners, pages, FAQ — app na dar launch e vanchay chhe ane
+   * mahine ek vaar badlaay chhe. Etle TTL lambo rakhi shakay; admin kai badle
+   * etle cache turat jate saaf thai jaay chhe.
+   */
+  CONTENT_CACHE_TTL: z.coerce.number().int().positive().default(600),
+
+  /**
+   * console = terminal ma print (dev). fcm = Firebase Cloud Messaging.
+   *
+   * OTP_PROVIDER jevo j dhancho: navo provider joiye tyare ek sender class
+   * lakhvo ane ahiya case ummerivo — NotificationsService ne khabar pan
+   * nahi pade.
+   */
+  PUSH_PROVIDER: z.enum(['console', 'fcm']).default('console'),
+
+  /** Firebase service account nu JSON (aakhu, ek line ma) — PUSH_PROVIDER=fcm mate */
+  FCM_SERVICE_ACCOUNT_JSON: z.string().optional().default(''),
+
+  /**
+   * Ek vaar ma ketla devices ne mokalvu.
+   *
+   * FCM ni potani had 500 ni chhe. Aa thi motto batch karso to provider j
+   * na paadse — ane 40,000 ne ek sathe mokalvani koshish karso to memory
+   * ma 40,000 messages ubha rahese.
+   */
+  PUSH_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
+
+  ADMIN_MAX_LOGIN_ATTEMPTS: z.coerce.number().int().positive().default(10),
+  ADMIN_LOGIN_LOCK_SECONDS: z.coerce.number().int().positive().default(900),
+
   DEFAULT_COUNTRY_CODE: z.string().length(2).default('IN'),
 
   // "abcd.myshopify.com" — protocol ke trailing slash vagar
@@ -140,5 +208,52 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     );
   }
 
+  assertAdminConfigIsSane(parsed.data);
+
   return parsed.data;
+}
+
+/**
+ * Admin panel adhuru configure thayelu na rahi jaay.
+ *
+ * Sauthi kharaab halat e chhe jya ADMIN_EMAIL to set hoy pan secret nabdo hoy
+ * — tyare panel kholelu chhe ane koi ne khabar pan nathi. Etle niyam saado
+ * chhe: kaa to badhu barabar, kaa to admin aakhu band. Vachche kai nahi.
+ */
+function assertAdminConfigIsSane(env: Env): void {
+  if (!env.ADMIN_EMAIL) return;
+
+  const problems: string[] = [];
+
+  if (env.JWT_ADMIN_SECRET.length < 32) {
+    problems.push(
+      'JWT_ADMIN_SECRET must be at least 32 characters long when ADMIN_EMAIL is set',
+    );
+  }
+
+  if (env.JWT_ADMIN_SECRET && env.JWT_ADMIN_SECRET === env.JWT_ACCESS_SECRET) {
+    problems.push(
+      'JWT_ADMIN_SECRET must be different from JWT_ACCESS_SECRET — ' +
+        'sharing one secret lets a customer token reach the admin endpoints',
+    );
+  }
+
+  if (!env.ADMIN_PASSWORD_HASH && !env.ADMIN_PASSWORD) {
+    problems.push(
+      'ADMIN_PASSWORD_HASH is required when ADMIN_EMAIL is set ' +
+        '(generate it with: npm run admin:hash)',
+    );
+  }
+
+  if (env.NODE_ENV === 'production' && env.ADMIN_PASSWORD) {
+    problems.push(
+      'ADMIN_PASSWORD (plain text) cannot be used in production — ' +
+        'use ADMIN_PASSWORD_HASH instead',
+    );
+  }
+
+  if (problems.length) {
+    const details = problems.map((p) => `  - ${p}`).join('\n');
+    throw new Error(`Invalid admin configuration:\n${details}`);
+  }
 }

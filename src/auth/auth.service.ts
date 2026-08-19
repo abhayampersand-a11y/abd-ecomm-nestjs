@@ -213,21 +213,21 @@ export class AuthService {
   }
 
   /**
-   * Registration screen (first name, last name, email).
+   * Profile edit (first name, last name, gender).
    *
-   * ⚠️ Ahiya no email `contactEmail` ma jaay chhe, `primaryEmail` ma NAHI —
-   * karan ke e verified nathi. Fakt contact mate chhe.
+   * ⚠️ EMAIL AHIYA THI NATHI SET THATO. Un-verified email store karvano
+   * concept j kaadhi nakhyo chhe — koi pan bija no email type kari shake,
+   * ane e pachhi UI ma dekhaay to user ne em lage ke e confirmed chhe.
    *
-   * Juna orders match karva mate user e e email `/auth/identities/verify`
-   * thi verify karvo padse. Tya sudhi `emailVerified: false` aavse, ane app
-   * "verify your email to see older orders" batavi shake.
+   * Email add karvano EKMATRA raasto: `/auth/identities/request-otp` →
+   * `/auth/identities/verify`. Tya thi j e `primaryEmail` bane chhe ane
+   * juna orders jodaay chhe.
    */
   async updateProfile(
     customerId: string,
     data: {
       firstName?: string;
       lastName?: string;
-      email?: string;
       gender?: string;
     },
   ): Promise<CustomerProfileDto> {
@@ -237,9 +237,6 @@ export class AuthService {
         ...(data.firstName !== undefined && { firstName: data.firstName }),
         ...(data.lastName !== undefined && { lastName: data.lastName }),
         ...(data.gender !== undefined && { gender: data.gender }),
-        ...(data.email !== undefined && {
-          contactEmail: data.email.trim().toLowerCase(),
-        }),
       },
     });
 

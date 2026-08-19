@@ -77,11 +77,59 @@ export class AddressesService {
       await this.markDefaultLocally(customerId, address.id);
     }
 
+    await this.backfillCustomerName(customerId, dto);
+
     // Shopify push CHHELLE — default nakki thaya pachhi, jethi ek j call ma
     // `setAsDefault` pan sathe jaay ane bijo round-trip na karvo pade.
     await this.pushToShopify(customerId, address, shouldBeDefault);
 
     return toAddressDto({ ...address, isDefault: shouldBeDefault });
+  }
+
+  /**
+   * Customer nu naam khaali hoy to address na naam par thi bhari daiye.
+   *
+   * Signup ma have koi form nathi (registration screen kaadhi nakhi chhe),
+   * etle navo user naam vagar no j hoy chhe. Pehli address e j pehli jagya
+   * chhe jya e potanu naam type kare chhe — ene vaparva thi ene ek vadhu
+   * screen bharvi nathi padti, ane Shopify par ane order confirmation mail
+   * ma khaali naam nathi jatu.
+   *
+   * `updateMany` + `where: { firstName: null }` — race-safe. Ek j kshan e
+   * user profile save kare ane aa chale, to pan user e type karelu j rahese:
+   * DB pote nakki kare chhe, aapne pehla vaanchi ne pachhi lakhta nathi.
+   * (Aa bilkul e j pattern chhe je `IdentityService` Shopify backfill ma
+   * vaapre chhe.)
+   *
+   * Best-effort: aa fail thay to pan address to save thai j gayo chhe, etle
+   * user ne error batavvano koi matlab nathi.
+   */
+  private async backfillCustomerName(
+    customerId: string,
+    dto: { firstName?: string | null; lastName?: string | null },
+  ): Promise<void> {
+    const firstName = dto.firstName?.trim();
+    const lastName = dto.lastName?.trim();
+    if (!firstName && !lastName) return;
+
+    try {
+      if (firstName) {
+        await this.prisma.customer.updateMany({
+          where: { id: customerId, firstName: null },
+          data: { firstName },
+        });
+      }
+      if (lastName) {
+        await this.prisma.customer.updateMany({
+          where: { id: customerId, lastName: null },
+          data: { lastName },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Name backfill failed for ${customerId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async update(

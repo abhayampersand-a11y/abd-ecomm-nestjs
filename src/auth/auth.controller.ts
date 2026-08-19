@@ -107,13 +107,13 @@ export class AuthController {
 
   /**
    * PATCH /auth/me
-   * Body: { "firstName": "Abhay", "lastName": "Desai", "email": "a@b.com" }
+   * Body: { "firstName": "Abhay", "lastName": "Desai", "gender": "female" }
    *
-   * Registration screen (screen 05). Login pachhi `isNewUser: true` aave
-   * tyare j app aa screen dekhaade.
+   * Profile screen (36) nu edit. Signup vakhte koi form nathi — OTP verify
+   * pachhi user sidho app ma jaay chhe.
    *
-   * Note: ahiya no email verified NATHI ganato — profile ma `emailVerified:
-   * false` aavse. Juna orders mate ene alag thi verify karvo pade.
+   * ⚠️ Email ahiya thi set NATHI thato. Ena mate
+   * `/auth/identities/request-otp` → `/auth/identities/verify`.
    */
   @Patch('me')
   @UseGuards(JwtAuthGuard)

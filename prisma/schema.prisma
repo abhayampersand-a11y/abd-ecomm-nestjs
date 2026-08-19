@@ -64,14 +64,11 @@ model Customer {
   /// koi bija no email ahiya naakhi ne ena account sudhi pahonchi shakay.
   primaryPhone String? @unique
   /// Hammesha lowercase store thay chhe.
+  ///
+  /// Aa customer no EKMATRA email chhe. Un-verified email kyanya store nathi
+  /// thato — app registration ma email maangti j nathi, ane admin pan set
+  /// nathi kari shakto. Email fakt OTP verify thay tyare j ahiya aave chhe.
   primaryEmail String? @unique
-
-  /// Registration screen par user e type karelo email — VERIFIED NATHI.
-  /// Fakt contact mate (order confirmation vagere). Order matching ke login
-  /// lookup ma aa kyarey na vaparvo. Unique pan nathi — be users bhulथी ek
-  /// j email type kare to signup fail na thavo joiye.
-  /// Verify thay etle e `primaryEmail` + CustomerIdentity ma jaay chhe.
-  contactEmail String?
 
   firstName String?
   lastName  String?
@@ -113,6 +110,10 @@ model Customer {
   cart           Cart?
   wishlist       WishlistItem[]
   recentlyViewed RecentlyViewed[]
+  notifications  Notification[]
+
+  influencerApplications InfluencerApplication[]
+  influencer             Influencer?
 
   @@index([status])
   @@map("customers")
@@ -132,7 +133,7 @@ model CustomerIdentity {
   customerId String   @db.Uuid
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  type IdentifierType
+  type  IdentifierType
   /// Normalized: PHONE => E.164, EMAIL => lowercase trimmed
   value String
 
@@ -166,7 +167,7 @@ model ShopifyCustomerLink {
   shopifyCustomerId String @unique
 
   /// 'phone' | 'email' | 'manual' — audit mate: aa link kem banyo
-  matchedVia String
+  matchedVia   String
   /// Kaya verified value thi match thayu (audit trail)
   matchedValue String?
 
@@ -185,7 +186,7 @@ model OtpCode {
 
   identifierType IdentifierType
   /// Normalized identifier
-  identifier String
+  identifier     String
 
   /// HMAC-SHA256(code, OTP_PEPPER) — plain code kyarey DB ma nahi
   codeHash String
@@ -429,4 +430,426 @@ model RecentlyViewed {
   @@unique([customerId, productHandle])
   @@index([customerId, viewedAt])
   @@map("recently_viewed")
+}
+
+// ---------------------------------------------------------------------------
+// INFLUENCER PROGRAM — Phase 1: application flow
+//
+// Design rule: influencer e ALAG account NATHI. E j Customer chhe, jene ek
+// vadharani bhumika mali chhe. Etle `Influencer` row `Customer` ni upar
+// hangs — koi bijo login nathi, koi bija tokens nathi, ane grahak vaala
+// badha endpoints ene em na em chale chhe.
+// ---------------------------------------------------------------------------
+
+enum InfluencerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum InfluencerStatus {
+  /// Approve thayelo — reels muki shake ane coins kamai shake
+  ACTIVE
+  /// Admin e rokyo — juna reels feed ma thi nikdi jaay chhe ane navu earning
+  /// band. Wallet no baaki balance rahe chhe (kamayelu paisa chhe, saja nahi).
+  SUSPENDED
+}
+
+model InfluencerApplication {
+  id String @id @default(uuid()) @db.Uuid
+
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// "@priya.styles" — @ vagar store thay chhe, normalize kari ne
+  socialHandle   String
+  /// Platform: instagram | youtube | facebook — free String, karan ke aavti
+  /// kaale koi navu platform aavse ane enum badalvo etle migration.
+  socialPlatform String
+  /// Applicant e potej kahelo aankdo — VERIFIED NATHI. Admin e jate profile
+  /// kholi ne joi levu. Fakt queue sort karva mate kaam nu chhe.
+  followerCount  Int
+
+  /// Payout mate India ma jaruri chhe. ⚠️ Aa PII chhe — response ma hammesha
+  /// masked j jaay chhe (juo InfluencerMapper), aakho kyarey nahi.
+  panNumber String
+
+  status InfluencerApplicationStatus @default(PENDING)
+
+  /// Reject nu kaaran applicant ne dekhaay chhe, etle vaanchvаa layak lakhvu.
+  rejectionReason String?
+  /// Kayo admin e nirnay lidho. Single-admin setup chhe etle atyare hammesha
+  /// e j email — pan multi-admin aave tyare aa column pehla thi taiyar chhe.
+  reviewedBy      String?
+  reviewedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// ⚠️ Ek grahak ni EK j PENDING application hovi joiye.
+  ///
+  /// Postgres ma partial unique index Prisma schema thi nathi thato, etle e
+  /// migration ma hathe lakhyo chhe (juo migration.sql). Aa index vagar user
+  /// "Apply" be vaar dabaave to be rows bane chhe ane admin ne duplicate
+  /// queue ma dekhaay chhe.
+  @@index([customerId])
+  @@index([status, createdAt])
+  @@map("influencer_applications")
+}
+
+model Influencer {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// EK grahak = EK influencer. Aa unique j aa aakha design nu paayu chhe.
+  customerId String   @unique @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Kai application par thi aa banyo — audit mate
+  applicationId String @unique @db.Uuid
+
+  socialHandle   String
+  socialPlatform String
+
+  status InfluencerStatus @default(ACTIVE)
+
+  /// Suspend nu kaaran — admin ne pachhi yaad rahetu nathi ke kem karyu hatu
+  suspendedReason String?
+  suspendedAt     DateTime?
+
+  approvedAt DateTime @default(now())
+  approvedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("influencers")
+}
+
+// ===========================================================================
+// APP CONTENT (CMS) — Shopify ma aa kai j nathi
+//
+// Shopify pase products ane orders chhe, pan mobile app na home screen nu
+// banner, section nu order, "About us" nu majkur, FAQ — aa badhu enu vishay
+// j nathi. Etle aa aapdu potanu chhe, ane Phase 2 pachhi pan aapdu j rahese.
+//
+// ⚠️ Ek niyam: aa tables ma KYAREY bhaav, stock ke product no data nakal na
+// karvo. Ahiya fakt "kayo product batavvo" (handle) rahe chhe — "e ketla no
+// chhe" e hammesha Shopify/Products layer j kahe chhe. Nakal karso to ek din
+// app ma ₹1,200 ane checkout ma ₹1,500 dekhaashe.
+// ===========================================================================
+
+enum BannerLinkType {
+  /// Banner par tap kariye to kai na thay (fakt visual)
+  NONE
+  /// linkValue = product no handle
+  PRODUCT
+  /// linkValue = collection no handle
+  COLLECTION
+  /// linkValue = aakhu URL (in-app browser ma khule)
+  URL
+}
+
+model Banner {
+  id String @id @default(uuid()) @db.Uuid
+
+  title    String
+  imageUrl String
+  /// Image na aave tyare ane screen-reader mate
+  alt      String?
+
+  linkType  BannerLinkType @default(NONE)
+  linkValue String?
+
+  /// Kaya screen par — "home", "cart", "category" vagere. Enum jaan-bujhi ne
+  /// nathi: navi jagya e banner mukvo hoy tyare migration na joiye.
+  placement String @default("home")
+
+  /// Nano number pehla dekhaay
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  /// Sale na banners — jaate on/off thay chhe. Null = koi seema nahi.
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([placement, isActive, position])
+  @@map("banners")
+}
+
+enum HomeSectionType {
+  /// `reference` = banner placement
+  BANNER_CAROUSEL
+  /// `reference` = collection no handle
+  COLLECTION_ROW
+  /// `productHandles` = jate pasand karela products (aa j order ma)
+  PRODUCT_GRID
+  /// Badhi collections ni grid (categories screen jevu)
+  CATEGORY_GRID
+}
+
+/// Home screen nu layout — app hard-coded nathi, aa table j nakki kare chhe.
+/// Etle "aa mahine banner upar, next mahine bestsellers upar" mate app na
+/// navu version ni jarur nathi.
+model HomeSection {
+  id String @id @default(uuid()) @db.Uuid
+
+  type     HomeSectionType
+  title    String?
+  subtitle String?
+
+  reference      String?
+  productHandles String[]
+
+  /// Section ma vadhu ma vadhu ketli items
+  itemLimit Int @default(10)
+
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, position])
+  @@map("home_sections")
+}
+
+/// About us, Terms, Privacy, Return policy — app ma static screens
+model Page {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// "about-us", "terms", "privacy", "return-policy"
+  slug  String @unique
+  title String
+  /// Markdown ke HTML — app kayo format vaanche e app nakki kare
+  body  String
+
+  isPublished Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pages")
+}
+
+model Faq {
+  id String @id @default(uuid()) @db.Uuid
+
+  question String
+  answer   String
+  /// "Orders", "Shipping", "Returns" — app ma group karva mate
+  category String?
+
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, position])
+  @@map("faqs")
+}
+
+/// App ma "available offers" ma dekhaadva na coupons.
+///
+/// ⚠️ AA COUPON BANAVTU NATHI. Discount code Shopify ma j bane chhe ane
+/// valid chhe ke nahi e Shopify checkout j nakki kare chhe. Aa table fakt
+/// "grahak ne kaya codes batavva" nu list chhe. Ahiya code lakhi devathi e
+/// kaam karto nathi thai jato — Shopify ma pan e j code hovo joiye.
+model AppCoupon {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Shopify no discount code, jem no tem
+  code        String  @unique
+  title       String
+  description String?
+  imageUrl    String?
+  /// "₹2,000 thi upar na order par" — fakt dekhaadva mate
+  terms       String?
+
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, position])
+  @@map("app_coupons")
+}
+
+// ===========================================================================
+// PUSH NOTIFICATIONS
+//
+// `DeviceToken` pehla thi chhe (app token register kare chhe). Aa tables e
+// batave chhe ke kone, kyare, su mokalyu — ane sauthi vadhu jaruri: **su
+// nishfal gayu**.
+// ===========================================================================
+
+enum NotificationAudience {
+  /// Jena pase push token chhe eva badha
+  ALL
+  /// `segment` field pramane
+  SEGMENT
+  /// Ek j grahak — support na javaab mate
+  CUSTOMER
+}
+
+/// Segments ne enum rakhya chhe (banner na placement thi ultu) karan ke dar
+/// segment ni pachhal ek query chhe je code ma lakhelii chhe. Free string
+/// rakhiye to admin evu segment lakhi shake je code ne oLakhaatu j nathi,
+/// ane campaign chup-chaap 0 loko sudhi jaay.
+enum NotificationSegment {
+  ALL_USERS
+  /// Cart bharelu chhe pan 24 kalak thi shaant chhe
+  ABANDONED_CART
+  /// Wishlist ma kaik chhe
+  HAS_WISHLIST
+  /// 30 divas thi login nathi karyu
+  INACTIVE_30D
+  /// Chhella 7 divas ma joined
+  NEW_LAST_7D
+}
+
+enum NotificationStatus {
+  DRAFT
+  SCHEDULED
+  /// Atyare mokalvani prakriya chalu chhe — aa status j be vaar mokalvani
+  /// bhool rokato taalo chhe (juo `dispatchDue`)
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+
+  title String
+  body  String
+
+  /// App ma kya lai javu: "product:blue-saree", "collection:sarees",
+  /// "order:PBG1036", "url:https://..." — parse app kare chhe.
+  deepLink String?
+  imageUrl String?
+
+  audience NotificationAudience @default(ALL)
+  segment  NotificationSegment?
+
+  /// audience = CUSTOMER hoy tyare
+  customerId String?   @db.Uuid
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  status      NotificationStatus @default(DRAFT)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+
+  /// Ketla devices ne target karya / pahonchyu / nishfal
+  totalTargets Int @default(0)
+  sentCount    Int @default(0)
+  failedCount  Int @default(0)
+
+  /// Aakhu campaign fail thay tyare no karan (dar device no nahi)
+  error String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries NotificationDelivery[]
+
+  @@index([status, scheduledAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+/// FAKT NISHFAL delivery o ahiya lakhaay chhe.
+///
+/// 40,000 users na broadcast ma 40,000 "sent" rows lakhvi e ek j campaign ma
+/// aakhu table fulaavi de chhe, ane e rows koi kyarey vaanchtu nathi. Safal
+/// no aankdo `Notification.sentCount` ma chhe — ee j puratu chhe. Ahiya e j
+/// aave chhe jene khabar padvi jaruri chhe: kayo token bagdyo ane kem.
+model NotificationDelivery {
+  id String @id @default(uuid()) @db.Uuid
+
+  notificationId String       @db.Uuid
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  customerId String? @db.Uuid
+
+  platform     DevicePlatform
+  /// Token no chhello bhaag j — aakho token log ma kyarey na jaay
+  tokenPreview String
+
+  error    String
+  failedAt DateTime @default(now())
+
+  @@index([notificationId])
+  @@map("notification_deliveries")
+}
+
+/// Vaar vaar mokalvana messages — "Order shipped", "Sale live"
+model NotificationTemplate {
+  id String @id @default(uuid()) @db.Uuid
+
+  name  String @unique
+  title String
+  body  String
+
+  deepLink String?
+  imageUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notification_templates")
+}
+
+// ===========================================================================
+// AUDIT LOG
+//
+// Ek j admin chhe, etle "kone karyu?" no sawaal atyare nano chhe. Pan
+// "**kyare** ane **su** badlyu" no sawaal moto chhe: grahak fariyad kare ke
+// "mane block kem karyo" ke "mari wishlist kya gai", tyare aa ek j jagya chhe
+// jya javaab male chhe.
+//
+// FK jaan-bujhi ne nathi — je record delete ke merge thai gayo hoy eno itihaas
+// pan rehvo joiye.
+// ===========================================================================
+
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// "customer.block", "customer.merge", "banner.delete", "notification.send"
+  action String
+
+  /// "customer", "banner", "notification", "system"
+  entityType String
+  entityId   String?
+
+  /// Ek line ma mansa — panel ni list ma aa j dekhaay chhe
+  summary String
+
+  /// Fakt badlayela fields. Aakho record nakal na karvo — enathi juna
+  /// phone/email na hamesha maate copies bani jaay chhe.
+  before Json?
+  after  Json?
+
+  /// Admin no email. ADMIN_EMAIL badlaay to pan itihaas ma juno j rahe.
+  actor String
+  ip    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@map("audit_logs")
 }

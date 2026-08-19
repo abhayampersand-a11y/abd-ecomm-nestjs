@@ -22,6 +22,21 @@ chhe, ane `passwordHash` nullable chhe (ghana users ne kyarey password hase j na
 
 ---
 
+## Integration docs
+
+`docs/` ma screen-wise integration guides chhe — kai screen par kai API,
+kaya kram ma, ane response nu su karvu:
+
+| Document | Kona mate |
+|---|---|
+| [Mobile app integration](./docs/mobile-app-integration.md) | App team — screen by screen |
+| [Admin panel integration](./docs/admin-panel-integration.md) | Panel team — screen by screen |
+| [Figma changes needed](./docs/figma-changes.md) | Design — je screens/specs khoote chhe |
+
+Aa README **su** ane **kem** kahe chhe; e docs **kya** kahe chhe.
+
+---
+
 ## Setup
 
 ```bash
@@ -55,12 +70,15 @@ Badha routes `/api/v1` prefix sathe.
 | POST | `/auth/logout` | ✅ | Aa device no logout |
 | POST | `/auth/logout-all` | ✅ | Badha devices |
 | GET | `/auth/me` | ✅ | Profile + badha verified identifiers |
-| PATCH | `/auth/me` | ✅ | Registration screen — firstName, lastName, email |
+| PATCH | `/auth/me` | ✅ | Profile edit — firstName, lastName, gender |
 
-> **`PATCH /auth/me` no email verified NATHI.** E `contactEmail` ma jaay chhe,
-> `primaryEmail` ma nahi — profile ma `emailVerified: false` j rahese. Aa vagar
-> koi bija no email type karine ena account sudhi pahonchi shakat. Juna orders
-> mate user e ene identity-linking thi verify karvo padse.
+> **`PATCH /auth/me` EMAIL NATHI leto.** Un-verified email store karvano
+> concept j kaadhi nakhyo chhe. Email account par aavvano **ekmatra** raasto
+> `/auth/identities/request-otp` → `/auth/identities/verify` chhe. Aa vagar
+> koi bija no email type karine ena juna orders sudhi pahonchi shakat.
+>
+> **Signup par koi form nathi.** OTP verify pachhi user sidho app ma jaay
+> chhe. Naam pehli address save thay tyare tya thi bharaay chhe.
 
 ```bash
 # 1. OTP maango — phone ke email, ek j field
@@ -242,9 +260,9 @@ expire nathi thato).
 > Etle grahak na paisa jaay, order Shopify ma hoy, ane app ma "no orders yet"
 > dekhaay.
 >
-> Ahiya **fakt verified** value j jaay chhe (`primaryEmail` / `primaryPhone`) —
-> `contactEmail` kyarey nahi, nahi to grahak bija no email type kare ane eno
-> order bija na account ma chadi jaay.
+> Ahiya **fakt verified** value j jaay chhe (`primaryEmail` / `primaryPhone`).
+> Un-verified email system ma kyanya store j nathi thato, etle ahiya khoto
+> email pahonchvano koi raasto j nathi.
 
 ### Wishlist ane recently viewed
 
@@ -262,6 +280,365 @@ Phase 2 ma pan aapda DB ma j rahese.
 Aapne fakt `productHandle` saachviye chhiye, aakhu product nahi — bhaav ane
 stock badlaata rahe chhe, ane wishlist ma juno bhaav batavvo grahak sathe
 anyaay chhe.
+
+### Creator program (influencer)
+
+**Grahak ni baaju** — login joiye, pan influencer hovu jaruri nathi:
+
+| Method | Route | Auth | Kaam |
+|---|---|---|---|
+| POST | `/influencer/apply` | ✅ | Creator banva ni request |
+| GET | `/influencer/application` | ✅ | Potani request nu status (`null` = kyarey apply nathi karyu) |
+| GET | `/influencer/me` | ✅ | Creator profile (approve thayo hoy to j) |
+
+**Admin ni baaju** — `AdminJwtGuard`, alag token:
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/influencer-applications` | Review queue (search, status, sort, paging) |
+| GET | `/admin/influencer-applications/pending-count` | Sidebar badge |
+| GET | `/admin/influencer-applications/:id` | Detail |
+| POST | `/admin/influencer-applications/:id/approve` | Gate 1 — approve |
+| POST | `/admin/influencer-applications/:id/reject` | Kaaran farjiyat (10-500 chars) |
+
+**Influencer ALAG account nathi.** E j `Customer` chhe jene ek vadharani
+bhumika mali chhe — `Influencer` row `customerId` par unique chhe ane
+`Customer` ni upar hangs. Etle e badhu j karta rahe chhe je pehla karto hato:
+browse, cart, checkout, orders. Approve thavathi ek vibhag **khulе** chhe, kai
+**chhinvaatu** nathi.
+
+Trann vaato jaan-bujhi ne aa rite chhe:
+
+**PAN kyarey aakho bahar nathi jato.** Admin ne pan `ABC****34F` j male chhe.
+Panel ni screen office ma khulli padi hoy chhe ane koi pan pasar thato vaanchi
+shake. Aakho PAN payout vakhte DB mathi jate kaadhvano.
+
+**Approve ek j transaction ma chhe** — application update + `Influencer`
+create sathe. Vachche fail thay to application "APPROVED" dekhaay pan grahak
+pase creator access na hoy: e aa feature nu sauthi gundhaayelu support ticket
+hot.
+
+**Reject thaya pachhi 30 divas ni raah.** Aa vagar e j vyakti roj savare fari
+apply kare ane queue e naam thi bharai jaay jene admin pehla thi joi chukyo
+chhe. Response ma `canReapplyAt` aave chhe, etle app tarikh daakhvi shake.
+
+Ek grahak ni ek j vakhte **ek j PENDING application** — ane e niyam **Postgres
+na partial unique index** thi lagu thay chhe, fakt service na check thi nahi.
+Aa Prisma schema thi nathi thai shakto etle migration ma hathe lakhyo chhe. Be
+tap ek sathe padе tyare service no check bacha nathi karto; index kare chhe.
+
+---
+
+---
+
+### App content — banners, home layout, pages, FAQ
+
+| Method | Route | Auth | Kaam |
+|---|---|---|---|
+| GET | `/content/home` | — | **Aakhu home screen**, ek j call ma |
+| GET | `/content/banners?placement=home` | — | Ek jagya na banners |
+| GET | `/content/pages` | — | About / Terms / Privacy ni list |
+| GET | `/content/pages/:slug` | — | Page nu majkur |
+| GET | `/content/faqs` | — | FAQ |
+| GET | `/content/coupons` | — | App ma batavvana offer codes |
+
+Home screen nu layout **app ma hard-coded nathi** — `/content/home` no javaab
+j nakki kare chhe ke kaya sections, kaya kram ma, ane ander su. Etle "aa
+mahine banner upar, next mahine bestsellers upar" mate app release ni raah
+jovi nathi padti; admin panel ma save karo etle turat.
+
+```jsonc
+// GET /content/home
+{
+  "sections": [
+    { "type": "BANNER_CAROUSEL", "banners": [ /* ... */ ], "products": [], "collections": [] },
+    { "type": "COLLECTION_ROW", "title": "New in", "reference": "sarees",
+      "products": [ /* ProductSummaryDto */ ], "banners": [], "collections": [] }
+  ]
+}
+```
+
+> **App e ajaanyo `type` CHUP-CHAAP CHHODI DEVANO.** Aa ek niyam j aapne navo
+> section type ummervani chhut aape chhe — juna app versions ene fakt jota
+> nathi, crash nathi thata. Aa na paLaay to dar navo section type ek forced
+> app update bani jaay chhe.
+
+Ek section bhaange (collection Shopify ma delete thai gayu) to **e j section**
+gum thay chhe, aakhu home nahi — grahak ne khali screen batavvi e sauthi
+kharaab javaab chhe.
+
+⚠️ `/content/coupons` na codes **valid chhe evi koi khaatri nathi**. Discount
+Shopify ma bane chhe ane validate pan Shopify checkout j kare chhe; aa table
+fakt "grahak ne su batavvu" nu list chhe.
+
+---
+
+### Push notifications — device token
+
+| Method | Route | Auth | Kaam |
+|---|---|---|---|
+| POST | `/notifications/device-token` | ✅ | FCM/APNs token register/update |
+| DELETE | `/notifications/device-token` | ✅ | Logout vakhte kaadhvo |
+
+```bash
+curl -X POST localhost:3001/api/v1/notifications/device-token \
+  -H "authorization: Bearer $ACCESS_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"platform":"ANDROID","token":"fcm-token-here","deviceId":"pixel-8"}'
+```
+
+App e aa **dar launch e** call karvi — FCM/APNs tokens jate badlaata rahe chhe,
+ane juno token vaparso to notification kyaay nahi pahonche **ane koi error pan
+nahi aave**.
+
+Token par upsert thay chhe, customer par nahi: ek j vyakti na traN devices hoi
+shake, ane ek j device par be loko vaari-fari ne login kari shake. Bije kisse
+`customerId` update thavo j joiye — nahi to juna user na notifications nava
+user na phone par jashe.
+
+Logout vakhte `DELETE` call karvo. Na karo to e phone par juna user na
+notifications aavta rahese.
+
+Dev ma `PUSH_PROVIDER=console` chhe — push **terminal ma print thay chhe**,
+Firebase project ni jarur nathi.
+
+---
+
+## Admin panel
+
+Badha routes `/api/v1/admin/*` par. **Ek j admin user chhe — roles nathi**,
+etle na `admin_users` table, na signup, na "forgot password". Credentials env
+ma chhe.
+
+```bash
+npm run admin:hash -- "your-strong-password"                              # hash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"  # secret
+```
+
+```dotenv
+ADMIN_EMAIL="admin@yourstore.com"
+ADMIN_PASSWORD_HASH="$argon2id$..."
+JWT_ADMIN_SECRET="..."        # JWT_ACCESS_SECRET thi ALAG
+```
+
+`ADMIN_EMAIL` khaali rakho to **aakhu `/admin/*` band** — fail-closed. Password
+badalvo etle navo hash deploy karvano.
+
+### Kem alag secret
+
+| | Kem |
+|---|---|
+| **Alag JWT secret** | Ek j secret raakho to grahak no access token admin routes par pan chaali jaay — vachche fakt payload no `typ` field ubho rahe, ane ek din koi e check bhuli jashe. `JWT_ADMIN_SECRET === JWT_ACCESS_SECRET` hoy to **app boot j nathi thato**. |
+| **Alag strategy** | `'admin-jwt'` vs `'jwt'`. Guard bhulthi badlaai jaay to request 401 thai jaay chhe, chup-chaap pass nathi thati. |
+| **Refresh token nathi** | Ek vyakti, browser ma bethelo, 8 kalak ni session. Rotation na aakha tantra ni ahiya kimat nathi. |
+| **Login lockout** | 10 khota password pachhi e IP 15 minute band — throttler thi alag layer chhe (e request-rate rokE chhe, aa password-guessing). |
+| **Logout kharekhar logout chhe** | JWT pacho na levaay, etle eno `jti` Redis ni revoke-list ma jaay chhe — token ni baaki life jetla samay mate. |
+
+### Auth
+
+| Method | Route | Kaam |
+|---|---|---|
+| POST | `/admin/auth/login` | email + password → 8 kalak no token |
+| POST | `/admin/auth/logout` | Token turat nakamo |
+| GET | `/admin/auth/me` | Session chalu chhe ke nahi |
+
+### Dashboard
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/dashboard/summary` | Customers, sessions, carts, engagement, OTP health |
+| GET | `/admin/dashboard/signups?days=30` | Line chart |
+| GET | `/admin/dashboard/top-products` | Wishlist / views / carts mathi |
+
+> **Ahiya orders ke revenue NATHI** — e Shopify ma chhe. Be jagya e be alag
+> aankda dekhaay to koi ek par bharoso rahetо nathi. Aa panel e batave chhe je
+> Shopify **nathi** janto: app na users, enu cart, wishlist, sessions, OTP.
+
+### Customers
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/customers` | Ek j search box — phone, email, naam, uuid, Shopify id |
+| GET | `/admin/customers/export` | CSV (max 50k rows) |
+| POST | `/admin/customers/merge` | Duplicate merge — `dryRun: true` thi pehla juo |
+| GET | `/admin/customers/:id` | Profile + identities + Shopify links + cart |
+| PATCH | `/admin/customers/:id` | firstName, lastName, gender |
+| POST | `/admin/customers/:id/block` · `/unblock` | Block = login band **+ badhi sessions revoke** |
+| POST | `/admin/customers/:id/logout-all` | |
+| GET | `/admin/customers/:id/sessions` | Chalu devices + push tokens |
+| DELETE | `/admin/customers/:id/sessions/:sessionId` | Ek device kaadho |
+| GET | `/admin/customers/:id/orders` | Shopify parthi live (cursor pagination) |
+| GET | `/admin/customers/:id/addresses` · `/cart` · `/wishlist` · `/recently-viewed` | |
+
+> **`primaryPhone` / `primaryEmail` admin thi NA badlaay.** E be fields ma fakt
+> OTP-verified values j jaay chhe (juo [Data model](#data-model)). Admin ne edit
+> karva devathi **ek PATCH thi koi pan account bija na phone par jodai jaay**.
+> Kharekhar badalvu hoy to user e potana device par thi OTP verify karvo pade.
+
+**Block** ma fakt status nathi badalto — eno access token haju 15 minute chale
+chhe ane refresh token 60 divas, etle banne ahiya j band thay chhe.
+
+**Merge** ma source record **delete kyarey nathi thato**: `MERGED` + `mergedIntoId`
+thaay chhe, ane `IdentityService.resolveMergeChain()` juna raste aavelo login
+pan saachi jagya e pahonchaadi de chhe.
+
+### Security ane support
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/security/otp-logs` | "Mane OTP nathi aavto" no javaab |
+| GET | `/admin/security/otp-stats?days=7` | SMS gateway ni tabiyat |
+| POST | `/admin/security/otp/reset-limits` | Rate limit chhoodavo |
+| GET | `/admin/security/sessions` | Atyare kaya devices logged-in |
+| GET | `/admin/security/devices` | Push reach (iOS / Android / Web) |
+
+> **`codeHash` ke OTP code ahiya thi kyarey bahar nathi aavto.**
+> `reset-limits` fakt Redis na counters saaf kare chhe — OTP mokalto nathi, user
+> e jaate "Resend" dabaavvu pade. Admin ne code batavvani sagvad aapo, etle ek
+> din e sagvad thi j koi na account ma andar javashe.
+
+`otp-stats` ma sauthi kaam no aankdo **`neverUsed`** chhe: code niklyo pan koi e
+vaparyo nahi. E vadhe etle gateway ma kaik bagdyu chhe.
+
+### Carts
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/carts` | Fakt bharela carts |
+| GET | `/admin/carts/abandoned?idleHours=24` | Recovery list |
+| GET | `/admin/carts/:id` | Line-by-line |
+
+⚠️ Abandoned list ma **e loko pan aavse jemne kharidi lidhu chhe** — orders
+aapda DB ma nathi, etle e khabar padvani rit j nathi. Message mokalta pehla
+`/admin/customers/:id/orders` joi levu.
+
+Ane ahiya ni **badhi rakam "estimated" chhe**: cart lines ma add karti vakhte no
+bhaav saachvelo chhe. Asli rakam Shopify checkout ganse.
+
+### Content (CMS)
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET POST PATCH DELETE | `/admin/content/banners` · `/:id` | |
+| POST | `/admin/content/banners/reorder` | Drag-drop pachhi **ek j call** |
+| GET POST PATCH DELETE | `/admin/content/home-sections` · `/:id` | Home layout |
+| POST | `/admin/content/home-sections/reorder` | |
+| GET POST PATCH DELETE | `/admin/content/pages` · `/:id` | About, Terms, Privacy |
+| GET POST PATCH DELETE | `/admin/content/faqs` · `/:id` | + `/faqs/reorder` |
+| GET POST PATCH DELETE | `/admin/content/coupons` · `/:id` | App ma batavvana codes |
+
+Dar write pachhi content cache **jate saaf thay chhe** — save karo etle app ma
+turat. (Bhulai jaay to admin ne 10 minute junu dekhaay ane e fari-fari save
+karto rahe em samji ne ke kaik bagdyu chhe.)
+
+`isActive` ane schedule (`startsAt` / `endsAt`) alag chhe, etle response ma
+**`isLive`** pan aave chhe — "active chhe pan haju shuru nathi thayu" e panel
+ma dekhaavu joiye.
+
+Reorder ek transaction ma chhe: kaa to aakho navo kram, kaa to juno. Ek-ek
+PATCH mokalso to vachche fail thay ane list adhu-padhu kramai jaay.
+
+> **Image upload aapdi jawabdari ma nathi.** `imageUrl` ma Shopify Files /
+> Cloudinary / S3 nu URL chipkaavvanu. Upload andar laavo etle storage,
+> resizing, CDN ane cleanup — badhu aapnu thai jaay chhe.
+
+### Push notifications
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET POST | `/admin/notifications` | Campaigns |
+| POST | `/admin/notifications/estimate` | **Mokalva pehla: ketla loko sudhi jashe** |
+| GET PATCH DELETE | `/admin/notifications/:id` | Detail ma delivery failures |
+| POST | `/admin/notifications/:id/send` | ⚠️ Turat mokle, pachu na levaay |
+| POST | `/admin/notifications/:id/cancel` | Scheduled rokvo |
+| POST | `/admin/notifications/dispatch-due` | **Cron aa hit kare** |
+| GET POST PATCH DELETE | `/admin/notifications/templates` · `/:id` | |
+
+Audience: `ALL` · `SEGMENT` · `CUSTOMER`.
+Segments: `ALL_USERS` · `ABANDONED_CART` · `HAS_WISHLIST` · `INACTIVE_30D` · `NEW_LAST_7D`.
+
+Segments **enum** chhe (banner na `placement` thi ultu) karan ke dar segment ni
+pachhal ek query code ma lakhelii chhe. Free string rakhiye to admin evu segment
+lakhi shake je code ne oLakhaatu j nathi, ane campaign chup-chaap 0 loko sudhi
+jaay.
+
+⚠️ Dar segment ma `customer.status = ACTIVE` chhe **ane e kaadhvu nahi** —
+block karelo grahak ke merge thai gayelo duplicate record, ene marketing push
+mokalvi e sauthi saadi ane sauthi sharmajanak bhool chhe.
+
+**Scheduling ma scheduler nathi.** `@nestjs/schedule` no dependency jaan-bujhi
+ne nathi ummeryo (ek j vastu mate aakho package, ane dar instance ma timer =
+double send). E badle bahar no cron `POST /admin/notifications/dispatch-due` hit
+kare — daa.t. dar 5 minute. Be instances ek sathe hit kare to pan vaandho nahi:
+claim `DRAFT|SCHEDULED → SENDING` atomic `updateMany` thi thay chhe.
+
+**Fakt nishfal deliveries store thay chhe.** 40,000 users na broadcast ma
+40,000 "sent" rows lakhvi etle ek j campaign ma table fulaai jaay, ane e rows
+koi kyarey vaanchtu nathi. Safal no aankdo `sentCount` ma chhe. Provider
+"aa token have kayamt mate kharaab chhe" kahe to e token DB mathi **kaadhi
+naakhvaay chhe** — nahi to dar campaign e mareli entries par prayatn thato rahe.
+
+### Creator program (influencer)
+
+Applications ni review queue ane enu aakhu tark
+[Creator program (influencer)](#creator-program-influencer) ma chhe — ahiya
+fakt e j je tya nathi:
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/influencer-applications?sort=newest` | `sort`: `newest` (default) · `oldest` · `followers` |
+| GET | `/admin/influencers?status=ACTIVE` | Approve thai gayela creators |
+| POST | `/admin/influencers/:id/suspend` | `reason` farjiyat, min 10 akshar |
+| POST | `/admin/influencers/:id/unsuspend` | |
+
+`sort=followers` ek triage nu ojaar chhe, nirnay nu nahi: e aankdo
+**applicant e pote** kahelo chhe ane kyarey verify nathi thato.
+
+`sort=oldest` tyare vaparvu jyare queue pachhal padi gai hoy — jene sauthi
+vadhu raah joi chhe ene pehla javaab malvo joiye.
+
+**Suspend** ma `reason` farjiyat chhe, reject ni jem: mahina pachhi "aane kem
+suspend karyo hato?" no javaab bija kyaay thi nathi malto. Suspend thi juna
+reels feed ma thi nikdi jaay chhe ane navu earning band thay chhe — pan wallet
+no baaki balance rahe chhe. E kamayela paisa chhe, saja nahi.
+
+Approve/reject/suspend badhu **audit log ma jaay chhe**, kaaran sathe.
+
+### Audit log
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/audit-logs?entityType=customer&entityId=<uuid>` | Ek record no aakho itihaas |
+| GET | `/admin/audit-logs/actions` | Filter dropdown |
+
+Ek j admin chhe, etle "kone karyu?" no sawaal nano chhe — **"kyare ane su
+badlyu?" no sawaal moto chhe.** Grahak fariyad kare ke "mane block kem karyo"
+ke "mari wishlist kya gai", tyare javaab ahiya thi male chhe.
+
+Actor ane IP `AdminContextInterceptor` (AsyncLocalStorage) thi jate bharaay
+chhe — koi service ne e parameters pass karva padta nathi. Bijo rasto e hato ke
+dar method ma `actor` parameter ummervo, ane tyare navu method lakhnaar e
+parameter pass karvanu bhuli jaay ane audit chup-chaap gum thai jaay.
+
+`AdminAuditService.record()` **kyarey throw nathi karto**: audit lakhvani bhool
+thi asli kaam (block, banner update) roLaavu na joiye.
+
+### System / ops
+
+| Method | Route | Kaam |
+|---|---|---|
+| GET | `/admin/system/status` | Public `/health` nu vistrut roop |
+| GET | `/admin/system/address-sync` | Je addresses Shopify sudhi nathi pahonchya |
+| POST | `/admin/system/cache/flush` | `products` · `collections` · `orders` · `all` |
+
+### Navo admin route ummero tyare
+
+1. `@UseGuards(AdminJwtGuard)` **controller par** — global guard jaan-bujhi ne
+   nathi (baaki badhi app public ke customer-auth vaali chhe). Aa ek line j
+   aakha customer database ne bachaave chhe.
+2. Badalvanu kaam hoy to `AdminAuditService.record()` call karvo.
+3. Vaanchvanu kaam existing services thi levu (`OrdersService`, `CartService`,
+   `ContentService`) — query fari lakhso to be jagya e be niyamo bani jashe.
 
 ---
 
@@ -400,30 +777,38 @@ Pan *kyare* puchho chho e etlu j agatya nu chhe. **Order pehla puchho to
 delete no saaf raasto male chhe; order pachhi puchho to merge par aavvu pade
 chhe — ane merge block thai shake chhe.**
 
-| Kshan | Kem |
-|---|---|
-| **1. Onboarding (registration screen)** | Sauthi svachh. Haju ek pan order nathi, etle orphan delete thai jaay ane duplicate bane j nahi. Aa **default** raasto hovo joiye. |
-| **2. Orders screen no banner** | `emailVerified: false` hoy tyare. *"Juna orders nathi dekhata? Email verify karo."* |
-| **3. Checkout pehla** | **Chhelli svachh kshan.** Fakt phone verified hoy to email maango — **order bane e pehla**. |
-| **4. Profile → manage email/phone** | Hammesha rakho, pan fakt aana par bharoso na rakho — motabhaag na users tya jataa j nathi. |
+| Kshan | Kem | Kadakai |
+|---|---|---|
+| **1. Checkout pehla** | **Chhelli svachh kshan** — order bane e pehla. Fakt phone verified hoy to ahiya email maango. Aa **mukhya** jagya chhe. | Strong prompt, skippable |
+| **2. Orders screen no banner** | `emailVerified: false` hoy tyare. *"Juna orders nathi dekhata? Email verify karo."* | Banner |
+| **3. Addresses → "juna address lavo"** | `import-from-orders` / `sync` ne verified email joie chhe. Tya j maango. | On-demand |
+| **4. Profile → manage email/phone** | Hammesha rakho, pan fakt aana par bharoso na rakho — motabhaag na users tya jataa j nathi. | Optional |
+
+> ⚠️ **Orders ke addresses ne email pachhal BLOCK na karo.** Fakt phone
+> verified hoy evo grahak app ma order kari shake chhe (`buyerIdentity`
+> `primaryPhone` pan mokle chhe) ane e order `GET /orders` ma dekhaay pan
+> chhe. Ene "pehla email verify karo" kahi ne atkaavso to e potana j orders
+> nathi joi shakto. Email **fakt juna (app pehla na) data** mate joie chhe —
+> etle banner batavo, darvaajo band na karo.
 
 **Kyare nahi:** background ma chup-chaap kyarey nahi — e OTP mokle chhe, etle
-hammesha user-initiated hovu joiye. `PATCH /auth/me` ma email aapya pachhi
-aapo-aap OTP na mokalo; user ne "Verify" dabaavva do.
+hammesha user-initiated hovu joiye.
 
-**App ne kevi rite khabar pade ke puchhvu ke nahi** — `GET /auth/me` parthi,
-navu field kai joiytu nathi:
+**App ne kevi rite khabar pade ke puchhvu ke nahi** — `GET /auth/me` na
+`emailVerified` parthi, navu field kai joiytu nathi:
 
-| `email` | `emailVerified` | App su batave |
-|---|---|---|
-| `null` | `false` | *"Add your email to see your past orders"* |
-| set | `false` | *"Verify \<email\> to see your past orders"* (prefill karo) |
-| set | `true` | kai nahi — thai gayu |
+| `emailVerified` | App su batave |
+|---|---|
+| `false` | *"Add your email to see your past orders"* |
+| `true` | kai nahi — thai gayu |
 
-⚠️ `PATCH /auth/me` no email **fakt `contactEmail`** ma jaay chhe — verified
-nathi, etle order matching ma kyarey nathi vaparato ane Shopify par pan nathi
-jato. Ene `/auth/identities/verify` thi verify karo tyare j e `primaryEmail`
-bane chhe ane badhu jodaay chhe.
+> ⚠️ Profile response ma `email` field **nathi**. Verified email joiye to
+> `verifiedIdentifiers` ma `{ type: "EMAIL", value }` tarike male chhe.
+>
+> Prefill karvanu kai chhe j nahi — app kyarey email collect karti j nathi
+> jya sudhi e verify na thaay. Etle input hammesha khaali khule, ane e
+> **barabar** chhe: jo prefill thaay to e un-verified value hoy, ane e j
+> aakhi samasya hati.
 
 ### Website login
 
@@ -450,6 +835,11 @@ pan e **fakt Shopify Plus** par male chhe — Paithanic `Basic` plan par chhe.
 | **Refresh hashed at rest** | DB leak thay to pan session hijack na thai shake |
 | **Verified-only matching** | Order linking FAKT `customer_identities` na verified values par. Un-verified email par match karso to **bija na orders leak thashe** |
 | **Identity theft block** | Bija e verify karelo email claim na thai shake |
+| **Admin no alag secret** | `JWT_ADMIN_SECRET` `JWT_ACCESS_SECRET` thi alag hovo j joiye (boot par check). Ek j secret hoy to grahak no token admin routes par chaali jaay — vachche fakt payload no `typ` ubho rahe |
+| **Admin login lockout** | 10 khota password pachhi e IP 15 minute band. Throttler request-rate rokE chhe, aa password-guessing |
+| **Admin logout kharekhar logout** | `jti` Redis ni revoke-list ma jaay chhe — JWT expire thavani raah nathi jovi padti |
+| **PAN masked** | Creator applications ma PAN `ABC****34F` j — panel ni screen kholeli rahe chhe |
+| **Push fakt ACTIVE ne** | Dar segment query ma `customer.status = ACTIVE` chhe — blocked ke merged record ne marketing push na jaay |
 
 ---
 
@@ -496,20 +886,45 @@ Customer                 aapdi login identity (Shopify thi swatantra)
   └─ Address             aapda DB ma; juna orders mathi import thai shake
   └─ RefreshToken        hashed, rotating, family sathe
   └─ DeviceToken         push notifications
+  └─ InfluencerApplication  creator banva ni request (PAN sathe)
+  └─ Influencer             approve thayelo creator — customerId par UNIQUE
+  └─ Notification           campaign je aa ek grahak ne mokalyu
 
 OtpCode                  hashed, one-time, attempt-capped
+
+App content (CMS)        Shopify ma aa kai j nathi
+  Banner                 placement + position + schedule
+  HomeSection            home screen no aakho layout
+  Page                   About / Terms / Privacy / Return policy
+  Faq
+  AppCoupon              FAKT batavva mate — validate Shopify checkout kare
+
+Notification             campaign: audience, status, counts
+  └─ NotificationDelivery  FAKT nishfal deliveries (safal no aankdo counts ma)
+NotificationTemplate     vaar vaar mokalvana messages
+
+AuditLog                 admin e su badlyu — FK nathi, jethi delete/merge
+                         thayela records no itihaas pan rahe
 ```
 
-**`primaryPhone` / `primaryEmail` vs `contactEmail`** — aa farak security no
+**`Influencer` `Customer` ne badle nathi, ena upar chhe.** `customerId`
+unique chhe, etle ek grahak = ek creator, ane grahak vaala badha endpoints
+ene em na em chale chhe.
+
+**`primaryPhone` / `primaryEmail` ma FAKT verified values** — aa security no
 paayo chhe:
 
 | Field | Kya thi aave | Login lookup ma vaparaay? |
 |---|---|---|
 | `primaryPhone` / `primaryEmail` | **Verified** OTP, ke Shopify import | ✅ haa |
-| `contactEmail` | User e registration screen ma type karyu | ❌ **kyarey nahi** |
+
+Pehla ek `contactEmail` column hato je registration screen no un-verified
+email raakhto. **E kaadhi nakhyo chhe** — screen pote pan. Have system ma
+un-verified email nu koi thekaanu j nathi, etle "bhoolthi verified gani
+levano" jokham **structurally** khatam thai gayu chhe.
 
 Un-verified value `primaryEmail` ma naakhso to koi bija no email type karine
-ena account sudhi pahonchi shakse.
+ena account sudhi pahonchi shakse — etle e raasto koḍ ma kyanya chhe j nahi.
 
 `CustomerStatus`: `IMPORTED` (Shopify mathi aavyo, haju verify nathi thayo —
 **login allowed nathi**) → `ACTIVE` (OTP verify thayo) · `MERGED` (duplicate,
@@ -542,6 +957,9 @@ hoy — sauthi kharaab combination.
 | `SHOPIFY_STOREFRONT_TOKEN` | Aa vagar app boot thashe pan **checkout fail thashe**. Store-specific chhe — biju store, bijo token. |
 | `OTP_EXPOSE_IN_RESPONSE` | Production ma `false`. `true` hoy to app **boot j nahi thay** (guard chhe) — e jaan-bujhi ne chhe. |
 | `DATABASE_URL` `REDIS_URL` `JWT_ACCESS_SECRET` `OTP_PEPPER` | Aa chaar ma default nathi — na hoy to boot fail. |
+| `ADMIN_EMAIL` `ADMIN_PASSWORD_HASH` `JWT_ADMIN_SECRET` | Admin panel mate. `ADMIN_EMAIL` khaali = `/admin/*` **band** (fail-closed). `JWT_ADMIN_SECRET` `JWT_ACCESS_SECRET` jevo hoy, ke 32 akshar thi nano hoy, to **app boot j nahi thay**. |
+| `ADMIN_PASSWORD` | Production ma set hoy to **app boot j nahi thay** — plain password fakt local dev mate. |
+| `PUSH_PROVIDER` | Production ma `fcm` joiye. `console` rehe to campaigns "sent" dekhaashe pan koi na phone par kai nahi jaay. |
 
 Baaki na 28 env keys ma default chhe.
 
@@ -553,10 +971,24 @@ Baaki na 28 env keys ma default chhe.
    (potana store ni app hati). `npm run shopify:scopes` thi verify thay chhe.
 2. ~~Collections (category browsing)~~ ✅
 3. ~~Orders read + `ShopifyCustomerLink` thi filter~~ ✅ — juo `src/orders/`
-4. Cart Postgres ma (aapno potano — checkout time e Storefront API thi
-   `checkoutUrl` levu ane app ma kholvu)
+4. ~~Cart Postgres ma~~ ✅ — juo `src/cart/` ane `src/checkout/`
 5. Real OTP sender (MSG91)
-6. **Phase 2**: Bulk Operations API import → `shopify_customers` mirror →
+6. **Real push sender (FCM)** — `PUSH_PROVIDER=fcm` no case
+   `src/notifications/notifications.module.ts` ma pehla thi taiyar chhe,
+   fakt `FcmPushSender` lakhvano baaki chhe (`PushSender` interface).
+   Tya sudhi campaigns "sent" dekhaay chhe pan kyaay jata nathi.
+7. **Scheduled notifications no cron** — `POST /admin/notifications/dispatch-due`
+   ne dar 5 minute hit karvanu goothvvu (Render cron job ke bahar nu koi pan).
+   Aa vagar `scheduledAt` vaali campaigns SCHEDULED ma j padi rahe chhe.
+6. **Creator program** — juo `docs/reels-and-coin-rewards.pdf`
+   - ✅ Phase 1: application flow (`src/influencer/`, `src/admin/influencers/`)
+   - Phase 2: product picker → video upload → reel review → feed
+   - Phase 3: `reelId` `CartItem` par → checkout `attributes` ma →
+     `orders/paid` webhook. **Aa vagar coins no koi matlab nathi** — attribution
+     thai j na shake.
+   - Phase 4: coin rules + wallet ledger
+   - Phase 5: redemption + payout
+7. **Phase 2**: Bulk Operations API import → `shopify_customers` mirror →
    `IdentityService.linkShopifyRecords()` nu body bharvu (call sites already
    ready chhe) → `DbProductRepository` → `PRODUCT_SOURCE=db`
 
@@ -565,6 +997,7 @@ Baaki na 28 env keys ma default chhe.
 ## Scripts
 
 ```bash
+npm run admin:hash -- "pw"  # Admin panel no password hash (argon2id)
 npm run shopify:scopes   # Shopify e KHAREKHAR aapela scopes (read_all_orders?)
 npm run shopify:verify   # Shopify connection + queries check
 npm run prisma:deploy    # PRODUCTION ni migration (migrate deploy)

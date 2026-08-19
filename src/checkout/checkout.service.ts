@@ -86,9 +86,9 @@ export class CheckoutService {
    * ⚠️ Email pehla, phone pachhi — jaan-bujhi ne. Shopify order ne customer
    * sathe jodva mate email par sauthi vadhu bharoso kare chhe.
    *
-   * ⚠️ FAKT VERIFIED value j moklvi. `contactEmail` (registration screen ma
-   * type karelo, un-verified) ahiya kyarey na aave — nahi to grahak bija no
-   * email type kare ane eno order bija na account ma chadi jaay.
+   * ⚠️ FAKT VERIFIED value j moklvi. Un-verified email store j nathi thato
+   * (e concept kaadhi nakhyu chhe) — nahi to grahak bija no email type kare
+   * ane eno order bija na account ma chadi jaay.
    *
    * Jo grahak pase fakt phone hoy ane Shopify ma e phone vaalo record na hoy,
    * to Shopify navo customer banaavse. E vaandho nahi — grahak jyare potano

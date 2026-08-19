@@ -1,5 +1,4 @@
 import {
-  IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -49,8 +48,11 @@ export class RefreshTokenDto {
 }
 
 /**
- * Registration screen (screen 05) — OTP verify pachhi, jyare
- * `isNewUser: true` aavyu hoy tyare j dekhaadvani.
+ * Profile screen (36) nu edit.
+ *
+ * ⚠️ Ahiya EMAIL NATHI — jaan-bujhi ne. Email fakt OTP verify thay tyare j
+ * account par aave chhe (`/auth/identities/verify`). Un-verified email
+ * kyanya store nathi thato.
  */
 export class UpdateProfileDto {
   @IsOptional()
@@ -62,16 +64,6 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(80)
   lastName?: string;
-
-  /**
-   * Aa email VERIFIED nathi — fakt contact mate save thay chhe.
-   * Juna orders sathe match karva mate user e ene
-   * `/auth/identities/verify` thi verify karvo padse.
-   */
-  @IsOptional()
-  @IsEmail({}, { message: 'Email is not valid' })
-  @MaxLength(255)
-  email?: string;
 
   /**
    * Screen 36 nu "Additional Information → Gender".

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "abd-ecomm-nestjs",
-    "description": "Our API layer on top of Shopify.\n\nHOW TO USE:\n1. Run `Auth / 1. Request OTP` — devCode is saved automatically\n2. Run `Auth / 2. Verify OTP` — the code is filled in for you, and accessToken + refreshToken are saved\n3. Every other request now works — the Bearer token is attached automatically\n\nAll tokens are stored in collection variables, so there is nothing to copy by hand.\n\nA NOTE ON THE DOCUMENTATION IN THIS COLLECTION:\nEvery request documents where each response key comes from, using this notation:\n\n    responseKey  ← sourceField\n\nThe source is either a Shopify GraphQL field, a Postgres column, or a value\nwe compute ourselves. Comments cannot live inside the request body itself —\nPostman sends the raw body to the server as-is, so a `//` comment would\nbreak JSON parsing. All documentation therefore lives in each request's\ndescription, visible in the panel on the right.",
+    "description": "Our API layer on top of Shopify.\n\nHOW TO USE — CUSTOMER SIDE:\n1. Run `Auth / 1. Request OTP` — devCode is saved automatically\n2. Run `Auth / 2. Verify OTP` — the code is filled in for you, and accessToken + refreshToken are saved\n3. Every other customer request now works — the Bearer token is attached automatically\n\nHOW TO USE — ADMIN SIDE:\n1. Set the `adminEmail` and `adminPassword` collection variables\n2. Run `Admin — Auth / 1. Login` — adminToken is saved automatically\n3. Every `Admin — *` folder now works\n\n⚠️ THE TWO TOKENS ARE NOT INTERCHANGEABLE, and that is the point.\nCustomer auth and admin auth use different signing secrets and differently\nnamed Passport strategies. A customer token gets 401 on every /admin route,\nand an admin token gets 401 on every customer route. Mixing them fails loudly\ninstead of quietly passing. The app even refuses to boot if JWT_ADMIN_SECRET\nand JWT_ACCESS_SECRET are the same value.\n\nAll tokens are stored in collection variables, so there is nothing to copy by hand.\n\nA NOTE ON THE DOCUMENTATION IN THIS COLLECTION:\nEvery request documents where each response key comes from, using this notation:\n\n    responseKey  ← sourceField\n\nThe source is either a Shopify GraphQL field, a Postgres column, or a value\nwe compute ourselves. Comments cannot live inside the request body itself —\nPostman sends the raw body to the server as-is, so a `//` comment would\nbreak JSON parsing. All documentation therefore lives in each request's\ndescription, visible in the panel on the right.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -76,6 +76,70 @@
       "key": "variantId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@yourstore.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": "change-me-local-only"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
+    },
+    {
+      "key": "customerId",
+      "value": ""
+    },
+    {
+      "key": "bannerId",
+      "value": ""
+    },
+    {
+      "key": "homeSectionId",
+      "value": ""
+    },
+    {
+      "key": "pageId",
+      "value": ""
+    },
+    {
+      "key": "faqId",
+      "value": ""
+    },
+    {
+      "key": "couponId",
+      "value": ""
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "templateId",
+      "value": ""
+    },
+    {
+      "key": "influencerId",
+      "value": ""
+    },
+    {
+      "key": "cartId",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "deviceToken",
+      "value": "fcm-test-token-abcdef123456"
     }
   ],
   "item": [
@@ -193,7 +257,7 @@
                 "verify"
               ]
             },
-            "description": "Verifies the OTP and logs the user in.\n\n📌 THERE IS NO SEPARATE SIGNUP ENDPOINT. If the user is new they are created\nhere; if they already exist as an IMPORTED Shopify record, that record is\nactivated instead — keeping all of their history.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to `1. Request OTP`. The OTP is\n             bound to that identifier, so anything else will not match.\n             Required, max 255 characters.\n\ncode         The one-time password. Filled in from `{{devCode}}` during\n             development. Length is OTP_LENGTH (default 6); the field\n             accepts 4-8 characters.\n\ndeviceId     Ties the session to a device, which is what makes per-device\n             logout and session auditing possible. Optional, but the app\n             should always send a stable value. Max 128 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nisNewUser             ← whether this is the first ever login for this\n                        identifier. When `true` the app should show the\n                        registration screen → `4. Update profile`.\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records were\n                        attached to this account during login. Greater than\n                        zero for someone who previously checked out on the\n                        website as a guest.\n\ncustomer              ← the profile object — exactly the same shape as\n                        `3. Me`, documented there.\n\ntokens.accessToken    ← a JWT, valid for JWT_ACCESS_TTL (default 900s).\n                        Send it on protected requests as:\n                          Authorization: Bearer <token>\n\ntokens.refreshToken   ← an opaque random string (NOT a JWT), valid for\n                        REFRESH_TOKEN_TTL_DAYS (default 60 days).\n\ntokens.expiresIn      ← remaining lifetime of accessToken, IN SECONDS\ntokens.tokenType      ← always \"Bearer\"\n\nThe test script stores accessToken and refreshToken in collection variables,\nso nothing needs to be copied manually.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong code, expired code, or OTP_MAX_ATTEMPTS (default 5) exhausted\n429 — 20 requests/min per IP exceeded"
+            "description": "Verifies the OTP and logs the user in.\n\n📌 THERE IS NO SEPARATE SIGNUP ENDPOINT. If the user is new they are created\nhere; if they already exist as an IMPORTED Shopify record, that record is\nactivated instead — keeping all of their history.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to `1. Request OTP`. The OTP is\n             bound to that identifier, so anything else will not match.\n             Required, max 255 characters.\n\ncode         The one-time password. Filled in from `{{devCode}}` during\n             development. Length is OTP_LENGTH (default 6); the field\n             accepts 4-8 characters.\n\ndeviceId     Ties the session to a device, which is what makes per-device\n             logout and session auditing possible. Optional, but the app\n             should always send a stable value. Max 128 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nisNewUser             ← whether this is the first ever login for this\n                        identifier. When `true` the app should show the\n                        app. There is no registration form — send them to the home screen.\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records were\n                        attached to this account during login. Greater than\n                        zero for someone who previously checked out on the\n                        website as a guest.\n\ncustomer              ← the profile object — exactly the same shape as\n                        `3. Me`, documented there.\n\ntokens.accessToken    ← a JWT, valid for JWT_ACCESS_TTL (default 900s).\n                        Send it on protected requests as:\n                          Authorization: Bearer <token>\n\ntokens.refreshToken   ← an opaque random string (NOT a JWT), valid for\n                        REFRESH_TOKEN_TTL_DAYS (default 60 days).\n\ntokens.expiresIn      ← remaining lifetime of accessToken, IN SECONDS\ntokens.tokenType      ← always \"Bearer\"\n\nThe test script stores accessToken and refreshToken in collection variables,\nso nothing needs to be copied manually.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong code, expired code, or OTP_MAX_ATTEMPTS (default 5) exhausted\n429 — 20 requests/min per IP exceeded"
           }
         },
         {
@@ -216,11 +280,11 @@
                 "me"
               ]
             },
-            "description": "The signed-in user's profile, including every verified email and phone.\n\nRequires the Authorization header.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid                   ← OUR Customer.id (a UUID).\n                       This is never a Shopify id. Shopify's numeric ids do\n                       not leave the server.\n\nphone                ← Customer.primaryPhone (the verified one)\n                       `null` if the user signed up with an email.\n\nemail                ← Customer.primaryEmail (VERIFIED) when present,\n                       otherwise Customer.contactEmail (the UNVERIFIED one\n                       typed into the registration screen).\n                       ⚠️ So `email` can be populated while\n                       `emailVerified` is still `false` — they are two\n                       different things.\n\nemailVerified        ← whether any verified identity of type EMAIL exists\nphoneVerified        ← whether any verified identity of type PHONE exists\n\nfirstName            ← Customer.firstName, set by `4. Update profile`\nlastName             ← Customer.lastName, set by `4. Update profile`\n\nhasPassword          ← whether Customer.passwordHash is set.\n                       Always `false` in Phase 1 — login is OTP only. The\n                       field exists so the app does not break when password\n                       login is added later.\n\nverifiedIdentifiers  ← [{ type: \"PHONE\" | \"EMAIL\", value }]\n                       Every verified identifier on this account.\n                       📌 Past orders are matched ONLY against these values.\n                       An unverified email is never used for matching.\n\ncreatedAt            ← Customer.createdAt, as ISO 8601\n\n────────────────────────────────\nWHAT THE APP SHOULD DO\n────────────────────────────────\nWhen `emailVerified` is `false`, show \"Verify your email to see older\norders\" and start the flow in the `Identity linking` folder.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing, malformed or expired accessToken"
+            "description": "The signed-in user's profile, including every verified email and phone.\n\nRequires the Authorization header.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid                   ← OUR Customer.id (a UUID).\n                       This is never a Shopify id. Shopify's numeric ids do\n                       not leave the server.\n\nphone                ← Customer.primaryPhone (the verified one)\n                       `null` if the user signed up with an email.\n\nemailVerified        ← whether any verified identity of type EMAIL exists.\n                       ⚠️ There is NO `email` key in this response, by\n                       design. An email only ever reaches an account by\n                       being OTP-verified, so the address itself lives\n                       in `verifiedIdentifiers` — the entry with type\n                       \"EMAIL\". An unverified email cannot exist on\n                       this system at all.\nphoneVerified        ← whether any verified identity of type PHONE exists\n\nfirstName            ← Customer.firstName. Filled in automatically from\n                       the first delivery address the user saves, or by\n                       `4. Update profile`, or from a linked Shopify\n                       record. Null until one of those happens.\nlastName             ← Customer.lastName, same three sources\n\nhasPassword          ← whether Customer.passwordHash is set.\n                       Always `false` in Phase 1 — login is OTP only. The\n                       field exists so the app does not break when password\n                       login is added later.\n\nverifiedIdentifiers  ← [{ type: \"PHONE\" | \"EMAIL\", value }]\n                       Every verified identifier on this account.\n                       📌 Past orders are matched ONLY against these values.\n                       An unverified email is never used for matching.\n\ncreatedAt            ← Customer.createdAt, as ISO 8601\n\n────────────────────────────────\nWHAT THE APP SHOULD DO\n────────────────────────────────\nWhen `emailVerified` is `false`, show \"Verify your email to see older\norders\" and start the flow in the `Identity linking` folder.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing, malformed or expired accessToken"
           }
         },
         {
-          "name": "4. Update profile (registration screen)",
+          "name": "4. Update profile",
           "request": {
             "method": "PATCH",
             "header": [
@@ -235,7 +299,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Abhay\",\n  \"lastName\": \"Desai\",\n  \"email\": \"abhay@example.com\"\n}"
+              "raw": "{\n  \"firstName\": \"Abhay\",\n  \"lastName\": \"Desai\",\n  \"gender\": \"male\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/me",
@@ -247,7 +311,7 @@
                 "me"
               ]
             },
-            "description": "The registration screen. Show it only when `2. Verify OTP` returned\n`isNewUser: true`.\n\n────────────────────────────────\nBODY — every field is OPTIONAL (partial update)\n────────────────────────────────\n\nfirstName    Max 80 characters. Omit it and the stored value is unchanged.\nlastName     Max 80 characters. Omit it and the stored value is unchanged.\n\n             Sending either one also pushes the name to the customer's\n             Shopify record, so the store admin and order confirmation\n             emails show what the user actually typed. Best-effort: if\n             Shopify is down the profile still saves and the next update\n             re-syncs it.\n\ngender       Screen 36, \"Additional Information\". A free string, max 32\n             characters — the app decides which options to offer.\n\nemail        ⚠️ THIS EMAIL IS NOT VERIFIED.\n             It is stored in the `contactEmail` column, for contact purposes\n             only. The profile will still report `emailVerified: false`, and\n             THIS EMAIL IS NEVER USED TO MATCH PAST ORDERS.\n\n             Why: anyone could type somebody else's address here. If we\n             treated it as verified, they would be shown that person's order\n             history. Verifying it requires the OTP flow in the\n             `Identity linking` folder.\n\n             It is also NOT sent to Shopify. Shopify treats email as unique,\n             so writing an unverified one there could bind this account to\n             a stranger's customer record — and their order history.\n\n             ⚠️ NEXT STEP: accepting an email here links NOTHING on its own.\n             Once this call returns, prompt the user to verify it via\n             `Identity linking`. That is the step that finds their past\n             orders — and doing it now, before their first order, is what\n             keeps Shopify free of duplicate customers. See that folder's\n             description for why the timing matters.\n\n             Must be a valid email address, max 255 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe updated profile, in exactly the same shape as `3. Me`:\n\nid                   ← our Customer.id (UUID)\nphone                ← Customer.primaryPhone\nemail                ← primaryEmail if verified, else contactEmail —\n                       so this reflects what you just sent\nemailVerified        ← STILL `false` after this call, by design\nphoneVerified        ← whether a verified PHONE identity exists\nfirstName            ← what you just sent, or the previous value\nlastName             ← what you just sent, or the previous value\ngender               ← what you just sent, or the previous value\nhasPassword          ← always false in Phase 1\nverifiedIdentifiers  ← unchanged by this call\ncreatedAt            ← Customer.createdAt\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — invalid email, a field over its length limit, or an unknown field\n      (unknown properties are rejected, not silently dropped)\n401 — missing or expired accessToken"
+            "description": "Profile edit (screen 36).\n\n⚠️ THIS IS NOT A SIGNUP STEP. There is no registration screen any more —\nafter `2. Verify OTP` the user goes straight into the app, whether or not\n`isNewUser` is true. Their name is filled in automatically from the first\ndelivery address they save, so most users never open this screen at all.\n\n────────────────────────────────\nBODY — every field is OPTIONAL (partial update)\n────────────────────────────────\n\nfirstName    Max 80 characters. Omit it and the stored value is unchanged.\nlastName     Max 80 characters. Omit it and the stored value is unchanged.\n\n             Sending either one also pushes the name to the customer's\n             Shopify record, so the store admin and order confirmation\n             emails show what the user actually typed. Best-effort: if\n             Shopify is down the profile still saves and the next update\n             re-syncs it.\n\ngender       Screen 36, \"Additional Information\". A free string, max 32\n             characters — the app decides which options to offer.\n\n⚠️ THERE IS NO `email` FIELD ON THIS ENDPOINT. It was removed, and so was\nthe column behind it.\n\nStoring an address the user merely typed was the whole problem: anyone can\ntype a stranger's address, and once it sits on the account something will\neventually treat it as real. Hiding it was not enough — it is gone.\n\nAn email reaches an account through exactly one path:\n\n    POST /auth/identities/request-otp  →  POST /auth/identities/verify\n\nThat is also the step that finds the user's past orders. Send them there.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nThe updated profile, in exactly the same shape as `3. Me`:\n\nid                   ← our Customer.id (UUID)\nphone                ← Customer.primaryPhone\nemailVerified        ← UNCHANGED by this call. Nothing on this endpoint\n                       can alter it — only identity linking can.\nphoneVerified        ← whether a verified PHONE identity exists\nfirstName            ← what you just sent, or the previous value\nlastName             ← what you just sent, or the previous value\ngender               ← what you just sent, or the previous value\nhasPassword          ← always false in Phase 1\nverifiedIdentifiers  ← unchanged by this call\ncreatedAt            ← Customer.createdAt\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — invalid email, a field over its length limit, or an unknown field\n      (unknown properties are rejected, not silently dropped)\n401 — missing or expired accessToken"
           }
         },
         {
@@ -354,7 +418,7 @@
     },
     {
       "name": "Identity linking",
-      "description": "The \"I can't see my old orders\" flow.\n\nThe user signed in with their phone, but their older website orders were\nplaced as a guest under a DIFFERENT email address. Verifying that email here\nattaches those orders to their account.\n\nSecurity: linking only ever happens against a VERIFIED identifier —\notherwise anyone could claim someone else's order history.\n\n════════════════════════════════\nWHEN TO CALL THIS IN THE APP\n════════════════════════════════\nThis is not a settings-screen afterthought. WHEN you ask decides how much\nmess the backend has to clean up afterwards.\n\nThe store's numbers say why it matters. Of the 106 customers who have\nactually ordered: 62 have only an email, 43 have only a phone, and exactly\n1 has both. Neither channel alone finds everyone — so a phone-only app user\nis very often someone who already exists in Shopify under an email.\n\nWhen that person signs up by phone we create a NEW Shopify record for them.\nVerifying their email is what reunites the two:\n\n  Email verified BEFORE their first order\n      -> the record we created is still empty\n      -> it is DELETED. Clean, cheap, nothing left behind.\n\n  Email verified AFTER an order\n      -> that record now has an order on it and cannot be deleted\n      -> the two records must be MERGED inside Shopify instead\n      -> merges can be BLOCKED (subscriptions, gift cards, store credit),\n         and a blocked merge leaves a permanent duplicate customer\n\nSo, in priority order:\n\n  1. Onboarding, on the registration screen   <- make this the default path\n  2. A banner on the Orders screen whenever emailVerified is false\n  3. Before checkout, if only a phone is verified  <- last clean moment\n  4. Profile > manage email/phone  <- keep it, but do not rely on it\n\nNEVER call it silently in the background — it sends a real OTP, so it must\nalways be user-initiated. In particular, do NOT fire it automatically after\n'Auth / 4. Update profile' accepts an email; let the user tap \"Verify\".\n\n════════════════════════════════\nHOW THE APP KNOWS WHETHER TO ASK\n════════════════════════════════\nStraight from 'Auth / 3. Me'. No extra field is needed:\n\n  email = null,  emailVerified = false  ->  \"Add your email to see your\n                                             past orders\"\n  email = set,   emailVerified = false  ->  \"Verify <email> to see your\n                                             past orders\" (prefill it)\n  email = set,   emailVerified = true   ->  nothing to show, done",
+      "description": "The \"I can't see my old orders\" flow.\n\nThe user signed in with their phone, but their older website orders were\nplaced as a guest under a DIFFERENT email address. Verifying that email here\nattaches those orders to their account.\n\nSecurity: linking only ever happens against a VERIFIED identifier —\notherwise anyone could claim someone else's order history.\n\n════════════════════════════════\nWHEN TO CALL THIS IN THE APP\n════════════════════════════════\nThis is not a settings-screen afterthought. WHEN you ask decides how much\nmess the backend has to clean up afterwards.\n\nThe store's numbers say why it matters. Of the 106 customers who have\nactually ordered: 62 have only an email, 43 have only a phone, and exactly\n1 has both. Neither channel alone finds everyone — so a phone-only app user\nis very often someone who already exists in Shopify under an email.\n\nWhen that person signs up by phone we create a NEW Shopify record for them.\nVerifying their email is what reunites the two:\n\n  Email verified BEFORE their first order\n      -> the record we created is still empty\n      -> it is DELETED. Clean, cheap, nothing left behind.\n\n  Email verified AFTER an order\n      -> that record now has an order on it and cannot be deleted\n      -> the two records must be MERGED inside Shopify instead\n      -> merges can be BLOCKED (subscriptions, gift cards, store credit),\n         and a blocked merge leaves a permanent duplicate customer\n\nSo, in priority order:\n\n  1. Before checkout, if only a phone is verified  <- THE main moment, and\n     the last clean one. Ask here even if you ask nowhere else.\n  2. A banner on the Orders screen whenever emailVerified is false\n  3. On \"import my old addresses\", which needs a verified email anyway\n  4. Profile > manage email/phone  <- keep it, but do not rely on it\n\nThere is no onboarding prompt in this list on purpose. Signup collects\nnothing but a phone number, so the first natural moment to ask is checkout.\n\n⚠️ DO NOT BLOCK Orders or Addresses behind this flow. A phone-only customer\ncan place an order in the app and see it in GET /orders — checkout sends\ntheir verified phone as the buyer identity. Gate those screens and you are\nhiding a customer's own orders from them. Email is needed for PRE-APP data\nonly, so prompt, never gate.\n\nNEVER call it silently in the background — it sends a real OTP, so it must\nalways be user-initiated. Let the user tap \"Verify\".\n\n════════════════════════════════\nHOW THE APP KNOWS WHETHER TO ASK\n════════════════════════════════\nStraight from 'Auth / 3. Me'. No extra field is needed:\n\n  emailVerified = false  ->  \"Add your email to see your past orders\"\n  emailVerified = true   ->  nothing to show, done\n\nThe profile has no `email` key, so the input always opens empty. Nothing is\nlost: the app never collected an address to prefill it with. A verified\nemail, once linked, shows up in `verifiedIdentifiers` as the entry with\ntype \"EMAIL\".",
       "item": [
         {
           "name": "1. Request OTP for another email/phone",
@@ -435,7 +499,7 @@
                 "verify"
               ]
             },
-            "description": "Once verification succeeds — and not before — the old Shopify records\nbelonging to that identifier are attached to the user's account.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to\n             `1. Request OTP for another email/phone`.\n             Required, max 255 characters.\n\ncode         The one-time password, filled in from `{{linkDevCode}}`.\n             4-8 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records this\n                        verification attached. `0` is a perfectly normal\n                        result — it just means Shopify has no record under\n                        that email.\n\nimportedAddresses     ← how many addresses were pulled in from the newly\n                        linked Shopify records (address book + past orders).\n                        Also normally `0` for a brand-new customer.\n\ncustomer              ← the updated profile, same shape as `Auth / 3. Me`.\n                        The newly verified identifier now appears in\n                        `verifiedIdentifiers`, and for an email\n                        `emailVerified` flips to `true`.\n\nShow these two numbers to the user — \"found 5 past orders and 2 addresses\" —\notherwise nothing visibly happened and the step feels pointless. Then\nrefresh the Orders and Addresses screens.\n\n────────────────────────────────\nWHAT HAPPENS IN SHOPIFY (email only)\n────────────────────────────────\nVerifying an EMAIL also triggers a reconcile. If Shopify already has an\nolder customer under that email, it becomes the primary record and the\nphone-only record we created at signup has to go. How it goes depends on\none thing — whether an order was placed on it:\n\n  no orders yet  ->  deleted\n  has orders     ->  merged into the older record, phone carried across\n\nA merge is asynchronous and can be refused by Shopify (subscriptions, gift\ncards, store credit). If it is refused, the duplicate stays and is logged\nfor manual review.\n\n⚠️ None of this can fail the request. The email is verified either way, and\nthe app's order history is correct either way — both records stay linked\non our side. A failed reconcile only ever leaves a duplicate in the Shopify\nadmin, never a gap for the user.\n\n────────────────────────────────\n🔒 WHY THERE IS AN EXTRA OWNERSHIP CHECK\n────────────────────────────────\nThe server verifies that the OTP was issued to the SAME user who is now\npresenting it. Without that check an attacker could request an OTP for\ntheir own address, then submit it using ANOTHER user's accessToken — and\nquietly attach their email to that person's account.\n\nThis is also why linking only works against verified identifiers. The\nunverified email from `Auth / 4. Update profile` is never used for order\nmatching.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong or expired code, OR the OTP was issued to a different user\n409 — this email/phone is already verified on ANOTHER account.\n      The user cannot resolve this themselves — send them to support.\n      Do not retry.\n429 — 20 requests/min per IP exceeded"
+            "description": "Once verification succeeds — and not before — the old Shopify records\nbelonging to that identifier are attached to the user's account.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nidentifier   Must be THE SAME value sent to\n             `1. Request OTP for another email/phone`.\n             Required, max 255 characters.\n\ncode         The one-time password, filled in from `{{linkDevCode}}`.\n             4-8 characters.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nlinkedShopifyRecords  ← how many EXISTING Shopify customer records this\n                        verification attached. `0` is a perfectly normal\n                        result — it just means Shopify has no record under\n                        that email.\n\nimportedAddresses     ← how many addresses were pulled in from the newly\n                        linked Shopify records (address book + past orders).\n                        Also normally `0` for a brand-new customer.\n\ncustomer              ← the updated profile, same shape as `Auth / 3. Me`.\n                        The newly verified identifier now appears in\n                        `verifiedIdentifiers`, and for an email\n                        `emailVerified` flips to `true`.\n\nShow these two numbers to the user — \"found 5 past orders and 2 addresses\" —\notherwise nothing visibly happened and the step feels pointless. Then\nrefresh the Orders and Addresses screens.\n\n────────────────────────────────\nWHAT HAPPENS IN SHOPIFY (email only)\n────────────────────────────────\nVerifying an EMAIL also triggers a reconcile. If Shopify already has an\nolder customer under that email, it becomes the primary record and the\nphone-only record we created at signup has to go. How it goes depends on\none thing — whether an order was placed on it:\n\n  no orders yet  ->  deleted\n  has orders     ->  merged into the older record, phone carried across\n\nA merge is asynchronous and can be refused by Shopify (subscriptions, gift\ncards, store credit). If it is refused, the duplicate stays and is logged\nfor manual review.\n\n⚠️ None of this can fail the request. The email is verified either way, and\nthe app's order history is correct either way — both records stay linked\non our side. A failed reconcile only ever leaves a duplicate in the Shopify\nadmin, never a gap for the user.\n\n────────────────────────────────\n🔒 WHY THERE IS AN EXTRA OWNERSHIP CHECK\n────────────────────────────────\nThe server verifies that the OTP was issued to the SAME user who is now\npresenting it. Without that check an attacker could request an OTP for\ntheir own address, then submit it using ANOTHER user's accessToken — and\nquietly attach their email to that person's account.\n\nThis is also why linking only works against verified identifiers — and why\nnothing else on the API accepts an email at all. There is no unverified\naddress anywhere for order matching to accidentally trust.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — code is not 4-8 characters\n401 — wrong or expired code, OR the OTP was issued to a different user\n409 — this email/phone is already verified on ANOTHER account.\n      The user cannot resolve this themselves — send them to support.\n      Do not retry.\n429 — 20 requests/min per IP exceeded"
           }
         }
       ]
@@ -588,7 +652,7 @@
                 "import-from-orders"
               ]
             },
-            "description": "The endpoint behind the \"Fetch my shipping addresses based on past orders\"\ncheckbox. No body — the user is identified from the accessToken.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nimported              ← how many NEW addresses were saved, after\n                        deduplication\n\nfound                 ← how many UNIQUE addresses were discovered across\n                        the past orders.\n                        📌 `found` being larger than `imported` is normal,\n                        not an error — the difference was already saved.\n                        `found: 0` means no orders were located for the\n                        user's verified identifiers.\n\nlimitedToRecentOrders ← CURRENTLY ALWAYS `true`.\n                        Without the `read_all_orders` scope, Shopify only\n                        returns orders from the LAST 60 DAYS.\n                        The app can use this flag to explain why a\n                        long-standing customer's older orders did not show\n                        up. Once that scope is approved by Shopify this can\n                        become `false`.\n\n────────────────────────────────\nWHEN TO CALL IT\n────────────────────────────────\nThe app should call this AFTER login, as its own request — never by waiting\non the `2. Verify OTP` response. Otherwise a slow Shopify makes login itself\nfeel slow.\n\n📌 This endpoint looks at PAST ORDERS ONLY. Prefer `6. Sync from Shopify`,\nwhich also pulls the customer's Shopify ADDRESS BOOK — the addresses the\nuser saved on the website without necessarily ordering from them. This one\nis kept for older app builds.\n\n────────────────────────────────\n🔒 VERIFIED IDENTIFIERS ONLY\n────────────────────────────────\nOrders are looked up ONLY by the phone numbers and emails listed in\n`verifiedIdentifiers` on `Auth / 3. Me`. The unverified email from the\nregistration screen is deliberately ignored — otherwise anyone could type a\nstranger's email and harvest their delivery addresses.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
+            "description": "The endpoint behind the \"Fetch my shipping addresses based on past orders\"\ncheckbox. No body — the user is identified from the accessToken.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nimported              ← how many NEW addresses were saved, after\n                        deduplication\n\nfound                 ← how many UNIQUE addresses were discovered across\n                        the past orders.\n                        📌 `found` being larger than `imported` is normal,\n                        not an error — the difference was already saved.\n                        `found: 0` means no orders were located for the\n                        user's verified identifiers.\n\nlimitedToRecentOrders ← CURRENTLY ALWAYS `true`.\n                        Without the `read_all_orders` scope, Shopify only\n                        returns orders from the LAST 60 DAYS.\n                        The app can use this flag to explain why a\n                        long-standing customer's older orders did not show\n                        up. Once that scope is approved by Shopify this can\n                        become `false`.\n\n────────────────────────────────\nWHEN TO CALL IT\n────────────────────────────────\nThe app should call this AFTER login, as its own request — never by waiting\non the `2. Verify OTP` response. Otherwise a slow Shopify makes login itself\nfeel slow.\n\n📌 This endpoint looks at PAST ORDERS ONLY. Prefer `6. Sync from Shopify`,\nwhich also pulls the customer's Shopify ADDRESS BOOK — the addresses the\nuser saved on the website without necessarily ordering from them. This one\nis kept for older app builds.\n\n────────────────────────────────\n🔒 VERIFIED IDENTIFIERS ONLY\n────────────────────────────────\nOrders are looked up ONLY by the phone numbers and emails listed in\n`verifiedIdentifiers` on `Auth / 3. Me`. That is the entire set — the API\naccepts no unverified address anywhere, so there is nothing else it could\nmatch on. Otherwise anyone could type a stranger's email and harvest their\ndelivery addresses.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken"
           }
         },
         {
@@ -611,7 +675,7 @@
                 "sync"
               ]
             },
-            "description": "Pulls EVERYTHING address-related out of Shopify for this customer. No body —\nthe user is identified from the accessToken.\n\nTwo different sources, which are easy to confuse:\n\n  ADDRESS BOOK   the addresses the customer saved in their account on the\n                 WEBSITE. They may never have ordered from any of them.\n\n  PAST ORDERS    the shipping address attached to each historical order.\n                 Only reachable for orders in the last 60 days — see below.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nfromAddressBook       ← how many NEW addresses came from the Shopify\n                        customer address book\n\nfromPastOrders        ← how many NEW addresses came from past orders\n\nfound                 ← the customer's TOTAL saved address count after the\n                        sync. Not \"how many were discovered\" — use it to\n                        decide whether to show an empty state.\n\nlimitedToRecentOrders ← CURRENTLY ALWAYS `true`. Without the\n                        `read_all_orders` scope Shopify only returns orders\n                        from the LAST 60 DAYS. The address book half is NOT\n                        affected by this limit.\n\n📌 Both counts being 0 is normal on a second call — everything was already\nimported. Duplicates are collapsed by a normalised fingerprint, so calling\nthis repeatedly never produces copies.\n\n────────────────────────────────\nWHEN TO CALL IT\n────────────────────────────────\nUsually you DON'T have to. The server runs this automatically after\n`Identity linking / 2. Verify & link`, and that response returns\n`importedAddresses` so the app can say \"3 addresses added\".\n\nCall it explicitly for a manual \"Refresh addresses\" control on the shipping\naddress screen.\n\n────────────────────────────────\n🔒 VERIFIED IDENTIFIERS ONLY\n────────────────────────────────\nOnly Shopify records matched to a VERIFIED email or phone are read. The\nunverified email from the registration screen is deliberately ignored —\notherwise anyone could type a stranger's email and harvest their addresses.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken\n\nShopify being down does NOT produce an error here — the counts simply come\nback as 0 and the call can be retried."
+            "description": "Pulls EVERYTHING address-related out of Shopify for this customer. No body —\nthe user is identified from the accessToken.\n\nTwo different sources, which are easy to confuse:\n\n  ADDRESS BOOK   the addresses the customer saved in their account on the\n                 WEBSITE. They may never have ordered from any of them.\n\n  PAST ORDERS    the shipping address attached to each historical order.\n                 Only reachable for orders in the last 60 days — see below.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nfromAddressBook       ← how many NEW addresses came from the Shopify\n                        customer address book\n\nfromPastOrders        ← how many NEW addresses came from past orders\n\nfound                 ← the customer's TOTAL saved address count after the\n                        sync. Not \"how many were discovered\" — use it to\n                        decide whether to show an empty state.\n\nlimitedToRecentOrders ← CURRENTLY ALWAYS `true`. Without the\n                        `read_all_orders` scope Shopify only returns orders\n                        from the LAST 60 DAYS. The address book half is NOT\n                        affected by this limit.\n\n📌 Both counts being 0 is normal on a second call — everything was already\nimported. Duplicates are collapsed by a normalised fingerprint, so calling\nthis repeatedly never produces copies.\n\n────────────────────────────────\nWHEN TO CALL IT\n────────────────────────────────\nUsually you DON'T have to. The server runs this automatically after\n`Identity linking / 2. Verify & link`, and that response returns\n`importedAddresses` so the app can say \"3 addresses added\".\n\nCall it explicitly for a manual \"Refresh addresses\" control on the shipping\naddress screen.\n\n────────────────────────────────\n🔒 VERIFIED IDENTIFIERS ONLY\n────────────────────────────────\nOnly Shopify records matched to a VERIFIED email or phone are read. There is\nno unverified address on the system to read instead — otherwise anyone could\ntype a stranger's email and harvest their addresses.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — missing or expired accessToken\n\nShopify being down does NOT produce an error here — the counts simply come\nback as 0 and the call can be retried."
           }
         },
         {
@@ -1456,6 +1520,2916 @@
               ]
             },
             "description": "Called when the app opens a product page. Returns 204 with no body.\n\nThe app should not wait for this call before showing the product.\n\nViewing the same product again moves it to the top instead of adding\na duplicate, and anything past the newest 20 is trimmed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Content",
+      "description": "App nu content — banners, home layout, pages, FAQ, coupons.\nBadhu PUBLIC chhe: app no pehlo launch (login pehla j) home screen bharai\njavo joiye, nahi to nava user ne khali app dekhaay chhe.\n\nLakhvanu kaam admin ni baaju chhe — \"Admin / Content\" folder juo.",
+      "item": [
+        {
+          "name": "1. Home screen",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/home",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "content",
+                "home"
+              ]
+            },
+            "description": "Aakhu home screen EK j call ma — sections + enu bharelu content.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nsections[]            ← home_sections table, position pramane, fakt e j je\n                        atyare live chhe (isActive + startsAt/endsAt window)\n\nsections[].type       ← BANNER_CAROUSEL | COLLECTION_ROW | PRODUCT_GRID\n                        | CATEGORY_GRID\n\nsections[].banners    ← BANNER_CAROUSEL mate — banners table\n                        (`reference` = placement)\nsections[].products   ← COLLECTION_ROW mate Shopify ni collection products,\n                        PRODUCT_GRID mate `productHandles` (E J KRAM MA)\nsections[].collections ← CATEGORY_GRID mate Shopify ni collections\n\nsections[].reference  ← COLLECTION_ROW ma collection no handle — app na\n                        \"View all\" button mate\n\n⚠️ APP E AJAANYO `type` CHUP-CHAAP CHHODI DEVANO.\nAa ek niyam j server ne navo section type ummervani chhut aape chhe — juna\napp versions ene fakt jota nathi, crash nathi thata. Aa na paLaay to dar\nnavo section type ek forced app update bani jaay chhe.\n\nEk section bhaange (collection Shopify ma delete thai gayu) to E J SECTION\ngum thay chhe, aakhu home nahi."
+          }
+        },
+        {
+          "name": "2. Banners",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/banners?placement=home",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "content",
+                "banners"
+              ],
+              "query": [
+                {
+                  "key": "placement",
+                  "value": "home"
+                }
+              ]
+            },
+            "description": "Ek jagya na banners.\n\nplacement   \"home\" | \"cart\" | \"category\" — admin e banner par je lakhyu hoy\n            te. Enum nathi: navi jagya e banner mukvo hoy tyare migration\n            na joiye.\n\nlinkType    NONE | PRODUCT | COLLECTION | URL\nlinkValue   PRODUCT/COLLECTION => handle, URL => aakhu URL, NONE => null"
+          }
+        },
+        {
+          "name": "3. Pages (list)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/pages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "content",
+                "pages"
+              ]
+            },
+            "description": "About / Terms / Privacy / Return policy ni list. Fakt published."
+          }
+        },
+        {
+          "name": "4. Page detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/pages/terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "content",
+                "pages",
+                "terms"
+              ]
+            },
+            "description": "Page nu majkur.\n\nbody   ← Markdown ke HTML — kayo format vaanchvo e app nakki kare chhe.\n\nDraft page par 404 j male chhe, \"exists but hidden\" jevu kai nahi."
+          }
+        },
+        {
+          "name": "5. FAQs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/faqs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "content",
+                "faqs"
+              ]
+            },
+            "description": "category thi group kari shakay. position pramane sorted."
+          }
+        },
+        {
+          "name": "6. Coupons",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/coupons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "content",
+                "coupons"
+              ]
+            },
+            "description": "App ma \"available offers\" ma batavvana codes.\n\n⚠️ AA CODES VALID CHHE EVI KOI KHAATRI NATHI.\nDiscount Shopify ma bane chhe ane validate pan Shopify checkout j kare chhe.\nAa table fakt \"grahak ne su batavvu\" nu list chhe."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Push notifications",
+      "description": "Grahak ni baaju — fakt device token. Mokalvanu kaam \"Admin / Notifications\" ma chhe.",
+      "item": [
+        {
+          "name": "1. Register device token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/device-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "device-token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"platform\": \"ANDROID\",\n  \"token\": \"{{deviceToken}}\",\n  \"deviceId\": \"pixel-8\"\n}"
+            },
+            "description": "App e AA DAR LAUNCH E call karvi.\n\nFCM/APNs tokens jate badlaata rahe chhe, ane juno token vaparso to\nnotification kyaay nahi pahonche ANE KOI ERROR PAN NAHI AAVE.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nplatform   IOS | ANDROID | WEB\ntoken      FCM/APNs no token (10-500 characters)\ndeviceId   Optional — logout vakhte kaam aave chhe\n\nToken par upsert thay chhe, customer par nahi: ek j vyakti na traN devices\nhoi shake, ane ek j device par be loko vaari-fari ne login kari shake.\nBije kisse customerId update thay chhe — nahi to juna user na notifications\nnava user na phone par jaay."
+          }
+        },
+        {
+          "name": "2. Unregister device token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/device-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "device-token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{deviceToken}}\"\n}"
+            },
+            "description": "Logout vakhte call karvo. Na karo to e phone par juna user na\nnotifications aavta rahese.\n\ndeleteMany + customerId thi chale chhe — bija na token ne aakade naakhvani\nrit nathi aapi."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Creator program",
+      "description": "Becoming an influencer, and checking where the application stands.\n\nIMPORTANT: an influencer is NOT a separate account. It is the same customer\nwith one extra capability, so every request here uses the ordinary customer\n`{{accessToken}}` — there is no second login and no separate token.\n\nRun `Auth / 2. Verify OTP` first so the token exists.",
+      "item": [
+        {
+          "name": "1. Apply to become a creator",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "// Saved so the admin folder can approve this exact application.",
+                  "if (res.id) pm.collectionVariables.set('applicationId', res.id);",
+                  "",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('starts as PENDING', () => pm.expect(res.status).to.eql('PENDING'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"socialHandle\": \"@priya.styles\",\n  \"socialPlatform\": \"instagram\",\n  \"followerCount\": 24500,\n  \"panNumber\": \"ABCDE1234F\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/influencer/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "influencer",
+                "apply"
+              ]
+            },
+            "description": "Submits an application. Requires the customer to be logged in.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nsocialHandle     2-60 chars. A leading \"@\" and a full profile URL are both\n                 stripped server-side, so \"@priya.styles\",\n                 \"priya.styles\" and \"https://instagram.com/priya.styles\"\n                 all store the same value. Letters, numbers, dots,\n                 underscores and hyphens only.\n\nsocialPlatform   instagram | youtube | facebook\n                 A plain string in the database, not an enum — a new\n                 platform should not require a migration.\n\nfollowerCount    0 to 500,000,000.\n                 ⚠️ SELF-REPORTED, never verified. It only exists so the\n                 admin can sort the queue; the admin still has to open\n                 the profile and look.\n\npanNumber        Indian PAN, format ABCDE1234F. Required because payouts\n                 attract TDS. Uppercased and de-spaced server-side.\n                 ⚠️ Never returned in full by any endpoint.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid                ← the new InfluencerApplication.id (UUID)\n                    Saved to {{applicationId}} by the test script.\n\nstatus            ← always \"PENDING\" on a fresh application\nsocialHandle      ← normalised value that was stored\nsocialPlatform    ← what you sent\nfollowerCount     ← what you sent\nrejectionReason   ← null here; only populated after a rejection\nsubmittedAt       ← createdAt, ISO 8601\nreviewedAt        ← null until an admin acts\ncanReapplyAt      ← null unless this application was rejected\n\n📌 The PAN you sent is NOT echoed back. Nothing returns it in full.\n\n────────────────────────────────\nRATE LIMIT\n────────────────────────────────\n5 requests/min. Deliberately tight: each one creates a row in a queue\nthat a human has to clear.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — bad handle, bad PAN format, or follower count out of range\n400 — rejected less than 30 days ago; the message says how long is left\n401 — no customer token\n409 — an application is already under review, or you are already a creator\n\nThe 409 for a duplicate is enforced twice: once by a readable check in\nthe service, and once by a partial unique index in Postgres that only\napplies to PENDING rows. The index is what survives two taps arriving\nat the same moment."
+          }
+        },
+        {
+          "name": "2. My application status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/influencer/application",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "influencer",
+                "application"
+              ]
+            },
+            "description": "The most recent application for the signed-in customer.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\n📌 Returns `null` — not 404 — when the customer has never applied.\n   That is the signal for the app to show a \"Become a creator\" button.\n\nid                ← InfluencerApplication.id\nstatus            ← PENDING | APPROVED | REJECTED\nsocialHandle      ← normalised handle\nsocialPlatform    ← instagram | youtube | facebook\nfollowerCount     ← self-reported number\nrejectionReason   ← the admin's written reason, shown verbatim to the\n                    applicant. `null` unless rejected.\nsubmittedAt       ← createdAt, ISO 8601\nreviewedAt        ← when an admin acted; null while pending\ncanReapplyAt      ← reviewedAt + 30 days, but ONLY for a rejection.\n                    `null` in every other case. The app should show the\n                    date and disable the button until then.\n\n────────────────────────────────\nWHAT THE APP SHOULD DO\n────────────────────────────────\nnull       → show \"Become a creator\"\nPENDING    → show \"Under review\", no action\nREJECTED   → show rejectionReason and the canReapplyAt date\nAPPROVED   → open the Creator tab; use GET /influencer/me from then on"
+          }
+        },
+        {
+          "name": "3. Creator profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/influencer/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "influencer",
+                "me"
+              ]
+            },
+            "description": "The creator record. Only exists once an application has been approved.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nid                ← Influencer.id (UUID). Different from the customer id\n                    and different from the application id.\nstatus            ← ACTIVE | SUSPENDED\nsocialHandle      ← copied from the approved application\nsocialPlatform    ← copied from the approved application\nsuspendedReason   ← why an admin suspended them; null when ACTIVE\napprovedAt        ← when Gate 1 was passed, ISO 8601\n\n────────────────────────────────\nSUSPENDED IS NOT DELETED\n────────────────────────────────\nA suspended creator keeps their record and their wallet balance —\nthat is money they already earned, not a punishment to reverse. What\nstops is new earning and publishing.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — no customer token\n404 — not a creator (never applied, still pending, or rejected).\n      Use GET /influencer/application to tell those cases apart."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Auth",
+      "description": "ONE admin user. No roles, no admin_users table, no signup, no\n\"forgot password\" — the credentials live in env.\n\n⚠️ COMPLETELY SEPARATE from customer auth: different login, different signing\nsecret (JWT_ADMIN_SECRET), different token variable ({{adminToken}}).\nA customer token gets 401 here. That is checked on boot too — if\nJWT_ADMIN_SECRET equals JWT_ACCESS_SECRET the app refuses to start, because\notherwise a customer token would sail through with only the payload's `typ`\nfield standing in the way.\n\nSet {{adminEmail}} and {{adminPassword}} first, then run \"1. Login\".",
+      "item": [
+        {
+          "name": "1. Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "description": "Email + password, and an 8-hour token comes back.\n\n────────────────────────────────\nBODY\n────────────────────────────────\n\nemail      must match ADMIN_EMAIL (case-insensitive)\npassword   verified against ADMIN_PASSWORD_HASH (argon2id).\n           Generate the hash with:  npm run admin:hash -- \"your-password\"\n\n────────────────────────────────\nRESPONSE\n────────────────────────────────\n\naccessToken   ← JWT signed with JWT_ADMIN_SECRET, typ: \"admin\"\nexpiresIn     ← JWT_ADMIN_TTL (default 28800 = 8 hours)\ntokenType     ← \"Bearer\"\nadmin.email   ← ADMIN_EMAIL\n\nThere is NO refresh token, on purpose. One person, sitting in a browser,\nan 8-hour session — the whole rotation machinery buys nothing here.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — \"Email or password is incorrect\". The SAME message for a wrong email\n      and a wrong password, and both checks always run, so the response\n      time does not reveal which half was right.\n429 — 10 failed attempts from one IP locks it for 15 minutes. This is a\n      separate layer from the throttler: that limits request rate, this\n      limits password guessing.\n503 — ADMIN_EMAIL is empty, so the admin panel is switched off entirely."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "// Admin token is stored separately from the customer accessToken.",
+                  "// Mixing the two is the whole thing this collection is trying to",
+                  "// make impossible to do by accident.",
+                  "if (res.accessToken) {",
+                  "  pm.collectionVariables.set('adminToken', res.accessToken);",
+                  "  console.log('Admin token saved, expires in', res.expiresIn, 'seconds');",
+                  "}",
+                  "",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('token returned', () => pm.expect(res.accessToken).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Called when the panel boots — a 200 means the session is still good.\n\nsessionExpiresAt  ← the token's exp claim, as ISO 8601"
+          }
+        },
+        {
+          "name": "3. Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "A JWT cannot be taken back, so the token's jti goes onto a Redis\nrevoke-list for whatever life it had left. Every admin request checks\nthat list, so this is a real logout rather than \"please stop using it\"."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Dashboard",
+      "description": "⚠️ THERE ARE NO ORDER OR REVENUE NUMBERS HERE, deliberately.\n\nOrders live in Shopify, not in our database. Showing our own version would\nput two different numbers on two different screens, and then neither one\ncan be trusted. Shopify admin is the right place for revenue.\n\nThis panel reports what Shopify does NOT know: app users, their carts,\nwishlists, sessions and OTP health.",
+      "item": [
+        {
+          "name": "1. Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard",
+                "summary"
+              ]
+            },
+            "description": "Every counter the home screen needs, in one call.\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\ncustomers.total / active / imported / blocked / merged\n                       ← customers table by CustomerStatus.\n                         IMPORTED = came from Shopify, has not proved\n                         identity yet, CANNOT log in.\ncustomers.newLast24h / newLast7d / newLast30d   ← createdAt\ncustomers.loggedInLast7d                        ← lastLoginAt\n\nsessions.active        ← refresh_tokens not revoked and not expired\nsessions.pushDevices   ← device_tokens rows\n\ncarts.withItems        ← carts holding at least one line\ncarts.abandonedOver24h ← ⚠️ includes people who have since ORDERED. Orders\n                         are not in our database, so there is no way to\n                         tell from here.\ncarts.estimatedValue   ← SUM(quantity × priceAmount) per currency.\n                         ⚠️ ESTIMATE ONLY — the price stored on a cart line\n                         is a copy from when it was added. Shipping, tax and\n                         discounts are Shopify checkout's job.\n\notpLast24h.issued      ← otp_codes created\notpLast24h.consumed    ← includes both a successful verify AND \"attempts\n                         ran out\" — see OtpService.verify()"
+          }
+        },
+        {
+          "name": "2. Signups chart",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard/signups?days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard",
+                "signups"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Daily signups, with zero-count days filled in so the chart has no holes.\n\n⚠️ date_trunc runs in UTC. The store is in India, so signups after 11:30pm\nIST land on \"tomorrow\". That is deliberate — the server, the database and\nevery other number here are UTC too, and converting in one place would put\neverything else subtly out of step."
+          }
+        },
+        {
+          "name": "3. Top products",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard/top-products?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard",
+                "top-products"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "mostWishlisted ← wishlist_items grouped by productHandle\nmostViewed     ← recently_viewed grouped by productHandle\nmostInCarts    ← cart_items, SUM(quantity)\n\nHandles and counts only — titles and images live in Shopify."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Customers",
+      "description": "The customer database. Everything here is data Shopify does not\nhave: our own login identity, carts, wishlists and sessions.\n\n⚠️ Unlike the customer endpoints, customerId comes from the URL rather than\nfrom a token. That is exactly why every route in this folder sits behind\nAdminJwtGuard — one route missing that decorator opens the whole database.\n\nRun \"Admin — Auth / 1. Login\" first; \"1. List / search\" saves {{customerId}}.",
+      "item": [
+        {
+          "name": "1. List / search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers?search=&status=&sort=newest&page=1&limit=25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "sort",
+                  "value": "newest"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                }
+              ]
+            },
+            "description": "ONE search box handles everything, because the panel only has one.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nsearch   phone, email, first/last name, our UUID, or a Shopify customer id.\n         Email search covers the verified address — the only one stored.\n         A UUID is matched exactly; everything else is a \"contains\" match.\nsort     newest (default) | oldest | lastLogin | name\n         lastLogin and name put NULLs last — otherwise page 1 is all empty\n         rows and the sort looks broken.\nstatus   ACTIVE | IMPORTED | MERGED | BLOCKED\nlinkedToShopify   \"true\" = only customers with linked Shopify records\npage / limit      offset pagination (this is our own Postgres)\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\nitems[].phone / email    ← primaryPhone / primaryEmail — VERIFIED values only.\n                           These are the only contact values a customer\n                           has. An unverified email cannot exist, so there\n                           is no second email column to show.\nitems[].status           ← IMPORTED cannot log in until an OTP is verified\nitems[].mergedIntoId     ← set means this row is a duplicate\nitems[].counts           ← addresses, wishlist, recentlyViewed, shopifyLinks"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const first = res.items && res.items[0] && res.items[0].id;",
+                  "if (first) {",
+                  "  pm.collectionVariables.set('customerId', first);",
+                  "  console.log('customerId saved:', first);",
+                  "}",
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}"
+              ]
+            },
+            "description": "Everything about one customer: verified identities, Shopify links, devices,\na cart snapshot, active session count, and both sides of any merge.\n\ncart.estimatedValue  ← ⚠️ add-time price copy, not a real total"
+          }
+        },
+        {
+          "name": "3. Update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Abhay\",\n  \"lastName\": \"Desai\",\n  \"gender\": \"male\"\n}"
+            },
+            "description": "⚠️ primaryPhone AND primaryEmail ARE NOT EDITABLE HERE, deliberately.\n\nThose two fields only ever hold OTP-verified values — order matching runs on\nthem. If an admin could edit them, one PATCH would attach any account to\nsomeone else's phone. To really change them the user verifies an OTP on their\nown device.\n\nEditable: firstName, lastName, gender. Send \"\" to clear a field.\n\n⚠️ There is no email field here either. An admin cannot record a customer's\nemail on their behalf — that would put an unverified address back on the\naccount through the side door. The customer verifies it themselves over OTP."
+          }
+        },
+        {
+          "name": "4. Block",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/block",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "block"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Repeated fraudulent COD orders\"\n}"
+            },
+            "description": "Blocks login AND revokes every live session.\n\nFlipping the status alone is not enough: their access token is still good for\nup to 15 minutes and their refresh token for 60 days. Both are closed here.\n\nreason is optional and goes to the audit log — a month later it is the only\nplace that answers \"why was this person blocked?\"\n\n400 with a plain message when:\n  - the customer is already blocked\n  - the customer was merged into another account (block that one instead)"
+          }
+        },
+        {
+          "name": "5. Unblock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/unblock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "unblock"
+              ]
+            },
+            "description": "Status back to ACTIVE. Sessions are NOT restored — they log in again."
+          }
+        },
+        {
+          "name": "6. Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "sessions"
+              ]
+            },
+            "description": "sessions[]  ← live refresh tokens: deviceId, userAgent, ip, expiry\ndevices[]   ← push tokens\n\n⚠️ tokenHash is NEVER returned. It is the one value that would let someone\nhijack the session."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const first = res.sessions && res.sessions[0] && res.sessions[0].id;",
+                  "if (first) {",
+                  "  pm.collectionVariables.set('sessionId', first);",
+                  "  console.log('sessionId saved:', first);",
+                  "}",
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Revoke one session",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/sessions/{{sessionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "sessions",
+                "{{sessionId}}"
+              ]
+            },
+            "description": "Kicks one device. Scoped by customerId as well as session id, so an admin cannot revoke an arbitrary session by guessing an id."
+          }
+        },
+        {
+          "name": "8. Log out everywhere",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/logout-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "logout-all"
+              ]
+            },
+            "description": "Revokes every refresh token for this customer."
+          }
+        },
+        {
+          "name": "9. Orders (from Shopify)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/orders?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Live from Shopify — orders are not in our database.\n\nThat is also why this one is cursor-paginated while the rest of the admin API\nuses page numbers: Shopify does not offer page numbers.\n\nCovers ALL the Shopify customer records linked to this person, so guest\ncheckouts made years ago show up too."
+          }
+        },
+        {
+          "name": "10. Addresses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/addresses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "addresses"
+              ]
+            },
+            "description": "shopifyAddressId  ← null means this address never made it to Shopify\nsyncedAt          ← null with a null shopifyAddressId = a push is still pending\nimportedFromOrder ← which past Shopify order it was harvested from"
+          }
+        },
+        {
+          "name": "11. Cart",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/cart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "cart"
+              ]
+            },
+            "description": "What is in their cart right now. Prices are the add-time copy, not live."
+          }
+        },
+        {
+          "name": "12. Wishlist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/wishlist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "wishlist"
+              ]
+            },
+            "description": "Resolved against live Shopify products, so prices shown are current."
+          }
+        },
+        {
+          "name": "13. Recently viewed",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/{{customerId}}/recently-viewed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "{{customerId}}",
+                "recently-viewed"
+              ]
+            },
+            "description": "Last 20 products."
+          }
+        },
+        {
+          "name": "14. Merge duplicates (DRY RUN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/merge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "merge"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceCustomerId\": \"{{customerId}}\",\n  \"targetCustomerId\": \"00000000-0000-4000-8000-000000000000\",\n  \"dryRun\": true\n}"
+            },
+            "description": "Two Customer rows are the same human — make them one.\n\nALWAYS RUN dryRun: true FIRST. A merge cannot be undone.\n\n────────────────────────────────\nWHAT MOVES\n────────────────────────────────\nVerified identities, Shopify links, addresses, wishlist, recently viewed,\npush tokens, OTP history and the cart all move to the target. The source's\nsessions are revoked.\n\nWhere a unique constraint would collide — the same address fingerprint or the\nsame wishlist handle on both sides — the source's copy is dropped instead of\nmoved, so the customer does not end up seeing their own house twice.\n\n────────────────────────────────\nWHAT DOES NOT HAPPEN\n────────────────────────────────\nThe source row is NEVER deleted. It becomes MERGED and points at the target.\nOrders, the audit trail and login all depend on it still being there:\nresolveMergeChain() follows mergedIntoId, so someone logging in with the old\nphone number still lands on the right account.\n\n────────────────────────────────\nRESPONSE\n────────────────────────────────\nmoved              counts per table\nskippedDuplicates  what was dropped because the target already had it\nrevokedSessions    sessions closed on the source"
+          }
+        },
+        {
+          "name": "15. Export CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/customers/export?status=ACTIVE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "customers",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACTIVE"
+                }
+              ]
+            },
+            "description": "Same filters as the list, but CSV.\n\nCapped at 50,000 rows — anything larger belongs in a background job, not in\nan HTTP response."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Security & support",
+      "description": "The day-to-day support desk. \"I never got my OTP\" is the most\ncommon call there is, and this folder answers it.\n\n⚠️ The OTP code — and even its hash — is NEVER returned by any of these\nendpoints. Give an admin a way to read codes and one day that way is how\nsomeone gets into an account.",
+      "item": [
+        {
+          "name": "1. OTP logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/security/otp-logs?identifier=&status=&purpose=&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "security",
+                "otp-logs"
+              ],
+              "query": [
+                {
+                  "key": "identifier",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "purpose",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Did a code go out, how many times was it tried, from which IP.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nidentifier  partial match — \"43210\" finds \"+919876543210\"\nstatus      pending | consumed | expired\npurpose     LOGIN | LINK_IDENTITY\nip          exact match\n\n────────────────────────────────\nRESPONSE\n────────────────────────────────\nitems[].status       ← consumed (used OR attempts ran out) | expired | pending\nitems[].attempts     ← wrong tries so far, out of maxAttempts\nitems[].requestIp    ← who asked for it\nitems[].customerId   ← only for LINK_IDENTITY\n\n⚠️ codeHash is deliberately not selected. There is no reason to move it out\nof the database, and once it is in a response it is also in a browser's\nnetwork tab, a screenshot and a log file."
+          }
+        },
+        {
+          "name": "2. OTP stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/security/otp-stats?days=7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "security",
+                "otp-stats"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7"
+                }
+              ]
+            },
+            "description": "The health of the SMS gateway.\n\nneverUsed      ← THE NUMBER THAT MATTERS. A code went out and nobody used it.\n                 When this climbs, delivery is broken — people are not\n                 getting their codes at all.\nusageRate      ← consumed / issued, as a percentage\ntopRequesters  ← one number with 40 OTPs is either a test device or someone\n                 being harassed"
+          }
+        },
+        {
+          "name": "3. Reset OTP rate limits",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/security/otp/reset-limits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "security",
+                "otp",
+                "reset-limits"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"9876543210\"\n}"
+            },
+            "description": "For \"I keep pressing resend and nothing happens\" — usually the hourly limit.\n\n⚠️ THIS DOES NOT SEND AN OTP AND NEVER SHOWS A CODE. It only clears the\nRedis counters so the user can press \"Resend\" themselves. That boundary is\nthe point: an admin who can trigger codes is an admin who can get into\naccounts.\n\nSend identifier, ip, or both. The identifier is normalised the same way\nOtpService does it, so \"9876543210\" and \"+91 98765 43210\" both work."
+          }
+        },
+        {
+          "name": "4. Live sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/security/sessions?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "security",
+                "sessions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Every logged-in device across all customers, newest first, with the customer attached."
+          }
+        },
+        {
+          "name": "5. Push reach",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/security/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "security",
+                "devices"
+              ]
+            },
+            "description": "How many devices a campaign could actually reach.\n\nbyPlatform          ← IOS / ANDROID / WEB\nactiveLast7d        ← tokens seen in the last week\ncustomersReachable  ← distinct customers with at least one token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Carts",
+      "description": "⚠️ EVERY AMOUNT IN THIS FOLDER IS AN ESTIMATE.\n\nA cart line stores the price as it was when the item was added. Prices move,\ndiscounts apply, shipping and tax are not counted at all — Shopify checkout\ndecides the real number. Call it \"estimated cart value\" in the panel, never\n\"revenue\".",
+      "item": [
+        {
+          "name": "1. List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/carts?sort=updated&search=&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "carts"
+              ],
+              "query": [
+                {
+                  "key": "sort",
+                  "value": "updated"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Only carts with something in them — an empty cart is just a row.\n\nsort   updated (default) | oldest | items\nidleHours   only carts untouched for this many hours"
+          }
+        },
+        {
+          "name": "2. Abandoned",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/carts/abandoned?idleHours=24",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "carts",
+                "abandoned"
+              ],
+              "query": [
+                {
+                  "key": "idleHours",
+                  "value": "24"
+                }
+              ]
+            },
+            "description": "The recovery list: items in the cart, untouched for 24 hours.\n\n⚠️ THIS LIST INCLUDES PEOPLE WHO HAVE ALREADY ORDERED. Orders are in\nShopify, not here, so there is no way to tell from this endpoint. Check\n\"Admin — Customers / 9. Orders\" before messaging anyone, or you will chase\na customer who already paid."
+          }
+        },
+        {
+          "name": "3. Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/carts/{{cartId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "carts",
+                "{{cartId}}"
+              ]
+            },
+            "description": "Line by line, with when each item was added and the price captured at that moment."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Content (CMS)",
+      "description": "Banners, home layout, pages, FAQs and the coupon list.\n\nThis folder is what removes \"we need an app release to change that\".\nSave here and the app sees it immediately — the content cache is cleared on\nevery write, in one shared place, so it cannot be forgotten on one endpoint.\n\nisActive vs isLive: isActive is the toggle, isLive also takes the\nstartsAt/endsAt schedule into account. The panel should show isLive.",
+      "item": [
+        {
+          "name": "1. Banners — list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/banners?placement=home&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "banners"
+              ],
+              "query": [
+                {
+                  "key": "placement",
+                  "value": "home"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Every banner, including inactive and scheduled ones.\n\nisActive   ← the admin toggle\nisLive     ← COMPUTED: isActive AND inside the startsAt/endsAt window.\n             Without this the panel shows \"active\" for a banner that has\n             not started yet, and the admin thinks something is broken."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res.items && res.items[0] && res.items[0].id;",
+                  "if (v) { pm.collectionVariables.set('bannerId', v); console.log('bannerId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Banners — create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/banners",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "banners"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Diwali Sale\",\n  \"imageUrl\": \"https://cdn.example.com/diwali.jpg\",\n  \"alt\": \"Diwali sale\",\n  \"linkType\": \"COLLECTION\",\n  \"linkValue\": \"sarees\",\n  \"placement\": \"home\",\n  \"position\": 0,\n  \"isActive\": true\n}"
+            },
+            "description": "────────────────────────────────\nBODY\n────────────────────────────────\ntitle      required\nimageUrl   required, must be an absolute URL.\n           ⚠️ WE DO NOT HOST IMAGES. Paste a Shopify Files / Cloudinary / S3\n           URL. Taking uploads in-house means storage, resizing, a CDN and\n           cleanup all become ours.\nalt        for screen readers and for when the image fails to load\nlinkType   NONE | PRODUCT | COLLECTION | URL\nlinkValue  handle for PRODUCT/COLLECTION, full URL for URL\nplacement  \"home\" (default), \"cart\", \"category\"… lowercase and hyphens.\n           A free string on purpose: a new spot should not need a migration.\nposition   lower shows first\nstartsAt / endsAt   ISO 8601. Sale banners switch themselves on and off,\n                    so nobody has to sit up at midnight toggling them.\n\nThe content cache is cleared automatically, so the app sees this at once."
+          }
+        },
+        {
+          "name": "3. Banners — update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/banners/{{bannerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "banners",
+                "{{bannerId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"position\": 1,\n  \"isActive\": false\n}"
+            },
+            "description": "Partial. Only the fields you send change."
+          }
+        },
+        {
+          "name": "4. Banners — reorder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/banners/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "banners",
+                "reorder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{bannerId}}\"\n  ]\n}"
+            },
+            "description": "Drag-and-drop, in ONE call: the array order becomes position 0, 1, 2…\n\nOne transaction, so it is all-or-nothing. Sending a PATCH per banner means a\nfailure halfway through leaves the list half-sorted."
+          }
+        },
+        {
+          "name": "5. Banners — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/banners/{{bannerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "banners",
+                "{{bannerId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6. Home sections — list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/home-sections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "home-sections"
+              ]
+            },
+            "description": "The whole home screen layout, in order, including inactive sections.\n\nThis table is what makes \"banner on top this month, bestsellers next month\"\na save in the panel instead of an app release."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res[0] && res[0].id;",
+                  "if (v) { pm.collectionVariables.set('homeSectionId', v); console.log('homeSectionId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Home sections — create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/home-sections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "home-sections"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"COLLECTION_ROW\",\n  \"title\": \"New in\",\n  \"reference\": \"sarees\",\n  \"itemLimit\": 10,\n  \"position\": 1,\n  \"isActive\": true\n}"
+            },
+            "description": "────────────────────────────────\nBODY\n────────────────────────────────\ntype       BANNER_CAROUSEL | COLLECTION_ROW | PRODUCT_GRID | CATEGORY_GRID\nreference  BANNER_CAROUSEL → a banner placement (\"home\")\n           COLLECTION_ROW  → a collection handle (\"sarees\")  [REQUIRED]\nproductHandles  PRODUCT_GRID → curated handles, shown in THIS order [REQUIRED]\nitemLimit  how many items to load (1-50). Keep it small — the home screen is\n           not a catalogue, and 60 products drains Shopify's cost budget on\n           one screen.\nposition / isActive / startsAt / endsAt   same as banners\n\n────────────────────────────────\nVALIDATION\n────────────────────────────────\nCOLLECTION_ROW without a reference, or PRODUCT_GRID with no handles, is\nrejected here. Otherwise it saves fine and then silently vanishes from the\nhome screen — refusing at save time is far kinder.\n\n⚠️ The handle itself is NOT checked against Shopify: that would mean a round\ntrip on every save. A wrong handle makes that one section disappear (and logs\na warning) instead of breaking the whole home screen."
+          }
+        },
+        {
+          "name": "8. Home sections — update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/home-sections/{{homeSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "home-sections",
+                "{{homeSectionId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Just landed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "9. Home sections — reorder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/home-sections/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "home-sections",
+                "reorder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{homeSectionId}}\"\n  ]\n}"
+            },
+            "description": "This is the layout order the app renders."
+          }
+        },
+        {
+          "name": "10. Home sections — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/home-sections/{{homeSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "home-sections",
+                "{{homeSectionId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "11. Pages — list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/pages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "pages"
+              ]
+            },
+            "description": "About, Terms, Privacy, Return policy — drafts included."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res[0] && res[0].id;",
+                  "if (v) { pm.collectionVariables.set('pageId', v); console.log('pageId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12. Pages — create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/pages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "pages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slug\": \"return-policy\",\n  \"title\": \"Return Policy\",\n  \"body\": \"## Returns\\n\\nWithin 7 days of delivery.\",\n  \"isPublished\": false\n}"
+            },
+            "description": "slug         lowercase, numbers and hyphens. This is what the app requests:\n             GET /content/pages/terms\ntitle\nbody         Markdown or HTML — the app decides which it renders\nisPublished  defaults to FALSE, so half-written text never reaches the app\n\nA draft returns 404 publicly, not \"exists but hidden\"."
+          }
+        },
+        {
+          "name": "12b. Pages — detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/pages/{{pageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "pages",
+                "{{pageId}}"
+              ]
+            },
+            "description": "One page including its body, drafts included.\n\nThe public GET /content/pages/:slug is by SLUG and only returns published\npages; this one is by id and shows everything, so the panel can open a draft\nfor editing."
+          }
+        },
+        {
+          "name": "13. Pages — update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/pages/{{pageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "pages",
+                "{{pageId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isPublished\": true\n}"
+            },
+            "description": "⚠️ body is deliberately NOT written to the audit log — it can be 50 KB, and\nstoring a before and an after copy on every save would make audit_logs the\nbiggest table in the database. The audit records title and isPublished."
+          }
+        },
+        {
+          "name": "14. Pages — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/pages/{{pageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "pages",
+                "{{pageId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "15. FAQs — list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/faqs?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "faqs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res.items && res.items[0] && res.items[0].id;",
+                  "if (v) { pm.collectionVariables.set('faqId', v); console.log('faqId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16. FAQs — create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/faqs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "faqs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"When will my order arrive?\",\n  \"answer\": \"Orders ship in 2 business days.\",\n  \"category\": \"Shipping\",\n  \"position\": 0,\n  \"isActive\": true\n}"
+            },
+            "description": "category groups them in the app (\"Orders\", \"Shipping\", \"Returns\")."
+          }
+        },
+        {
+          "name": "17. FAQs — update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/faqs/{{faqId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "faqs",
+                "{{faqId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "18. FAQs — reorder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/faqs/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "faqs",
+                "reorder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{faqId}}\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "19. FAQs — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/faqs/{{faqId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "faqs",
+                "{{faqId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "20. Coupons — list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/coupons?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "coupons"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "What the app shows under \"available offers\"."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res.items && res.items[0] && res.items[0].id;",
+                  "if (v) { pm.collectionVariables.set('couponId', v); console.log('couponId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "21. Coupons — create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/coupons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "coupons"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"DIWALI20\",\n  \"title\": \"20% off\",\n  \"description\": \"Festive offer\",\n  \"terms\": \"On orders above 2000\",\n  \"position\": 0,\n  \"isActive\": true\n}"
+            },
+            "description": "⚠️ THIS DOES NOT CREATE A COUPON.\n\nThe discount is created in Shopify and validated by Shopify checkout. This\nrow only decides what the app DISPLAYS. If the code does not exist in Shopify\nthe customer sees \"code invalid\" at checkout — the worst possible moment,\nturning away someone who was ready to pay.\n\ncode   must already exist in Shopify. Unique here.\nterms  free text for the app: \"on orders above ₹2,000\"\nstartsAt / endsAt   the offer hides itself when it expires"
+          }
+        },
+        {
+          "name": "22. Coupons — update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/coupons/{{couponId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "coupons",
+                "{{couponId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "23. Coupons — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/content/coupons/{{couponId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "content",
+                "coupons",
+                "{{couponId}}"
+              ]
+            },
+            "description": "Removes it from the app. The Shopify discount is untouched and still works."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Notifications",
+      "description": "Push campaigns.\n\nOrder of work: \"1. Estimate audience\" → \"3. Create campaign\" → \"6. SEND NOW\".\n\n⚠️ In development PUSH_PROVIDER=console, so campaigns report themselves as\nsent while nothing actually leaves the machine — the messages are printed to\nthe server log. Before real users, PUSH_PROVIDER=fcm and an FcmPushSender are\nrequired, otherwise the panel will happily show \"sent\" forever and nobody\nwill receive anything.\n\nDevice tokens come from the app — see the \"Push notifications\" folder.",
+      "item": [
+        {
+          "name": "1. Estimate audience",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/estimate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "estimate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"audience\": \"SEGMENT\",\n  \"segment\": \"ABANDONED_CART\"\n}"
+            },
+            "description": "RUN THIS BEFORE SENDING ANYTHING.\n\nSeeing \"40,000 devices\" should give an admin pause, and so should seeing\n\"4 devices\" — both mean something is worth checking.\n\n────────────────────────────────\nBODY\n────────────────────────────────\naudience   ALL | SEGMENT | CUSTOMER\nsegment    required when audience = SEGMENT\ncustomerId required when audience = CUSTOMER\n\n────────────────────────────────\nSEGMENTS\n────────────────────────────────\nALL_USERS        everyone with a push token\nABANDONED_CART   cart has items and has not been touched for 24 hours\nHAS_WISHLIST     at least one wishlist item\nINACTIVE_30D     no login in 30 days (or never)\nNEW_LAST_7D      joined in the last week\n\n⚠️ Every segment also requires customer.status = ACTIVE, and that condition\nmust never be removed. Sending marketing push to someone who was blocked, or\nto a duplicate row that was merged away, is the simplest and most\nembarrassing mistake this feature can make."
+          }
+        },
+        {
+          "name": "2. List campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications?status=&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "status: DRAFT | SCHEDULED | SENDING | SENT | FAILED | CANCELLED"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res.items && res.items[0] && res.items[0].id;",
+                  "if (v) { pm.collectionVariables.set('notificationId', v); console.log('notificationId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Create campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Diwali Sale is live\",\n  \"body\": \"Up to 40% off on sarees. Tap to shop.\",\n  \"deepLink\": \"collection:sarees\",\n  \"audience\": \"SEGMENT\",\n  \"segment\": \"HAS_WISHLIST\"\n}"
+            },
+            "description": "Creating does NOT send. \"/send\" is a separate call, on purpose.\n\n────────────────────────────────\nBODY\n────────────────────────────────\ntitle       max 100 chars. Android's tray shows roughly 40-50, so the panel\n            should preview it — the API will not silently truncate.\nbody        max 500\ndeepLink    \"product:blue-saree\" | \"collection:sarees\" | \"order:PBG1036\" |\n            \"url:https://…\"  — the app parses it.\n            ⚠️ Not validated here. A wrong deep link means the app opens on\n            home, which is bad; blocking the campaign over it is worse.\nimageUrl    absolute URL\naudience    ALL (default) | SEGMENT | CUSTOMER\nscheduledAt ISO 8601 in the future → status becomes SCHEDULED.\n            Leave it out → DRAFT."
+          }
+        },
+        {
+          "name": "4. Campaign detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/{{notificationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "{{notificationId}}"
+              ]
+            },
+            "description": "totalTargets / sentCount / failedCount   ← the outcome\nfailures[]   ← ⚠️ ONLY FAILURES ARE STORED.\n\nA 40,000-user broadcast would write 40,000 \"sent\" rows that nobody ever\nreads, and one campaign would bloat the table. The success number lives in\nsentCount. What is kept here is what someone actually needs: which token\nbroke and why. Tokens are stored masked (***last8)."
+          }
+        },
+        {
+          "name": "5. Update campaign",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/{{notificationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "{{notificationId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Diwali Sale — last day\"\n}"
+            },
+            "description": "Only DRAFT and SCHEDULED campaigns can be changed. Anything else returns 400 with its current status."
+          }
+        },
+        {
+          "name": "6. SEND NOW",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/{{notificationId}}/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "{{notificationId}}",
+                "send"
+              ]
+            },
+            "description": "⚠️ THIS SENDS IMMEDIATELY AND CANNOT BE TAKEN BACK.\n\n────────────────────────────────\nWHAT HAPPENS\n────────────────────────────────\n1. The status is claimed atomically: DRAFT|SCHEDULED → SENDING. Two clicks,\n   two tabs or two server instances race here, and the loser gets 400\n   instead of the customer getting the notification twice.\n2. Targets are resolved from the audience/segment (ACTIVE customers only).\n3. Messages go out in batches of PUSH_BATCH_SIZE (default 100; FCM's own\n   limit is 500).\n4. Failures are recorded; tokens the provider calls permanently dead are\n   DELETED, so future campaigns stop retrying corpses.\n5. Counts are written and the status becomes SENT.\n\nThe audit entry is written BEFORE sending — if the server dies mid-send\nthere is still a record that this campaign was started.\n\n⚠️ With PUSH_PROVIDER=console (the default) nothing leaves the machine: the\nmessages are printed to the server log and every one is reported as sent."
+          }
+        },
+        {
+          "name": "7. Cancel scheduled",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/{{notificationId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "{{notificationId}}",
+                "cancel"
+              ]
+            },
+            "description": "DRAFT or SCHEDULED only."
+          }
+        },
+        {
+          "name": "8. Dispatch due (CRON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/dispatch-due",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "dispatch-due"
+              ]
+            },
+            "description": "Sends every campaign whose scheduledAt has passed.\n\n⚠️ THIS PROJECT HAS NO SCHEDULER. @nestjs/schedule was deliberately not added\n— a whole package for one job, and a timer in every instance means the same\ncampaign goes out twice. An EXTERNAL CRON should hit this endpoint, say every\n5 minutes (a Render cron job, or anything else).\n\nWithout that cron, scheduledAt campaigns sit in SCHEDULED forever.\n\nCalling it twice at once is safe: the DRAFT|SCHEDULED → SENDING claim is a\nsingle atomic updateMany."
+          }
+        },
+        {
+          "name": "9. Delete campaign",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/{{notificationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "{{notificationId}}"
+              ]
+            },
+            "description": "A campaign that was already SENT cannot be deleted — it is history."
+          }
+        },
+        {
+          "name": "10. Templates — list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/templates?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Reusable messages: \"Order shipped\", \"Sale live\"."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res.items && res.items[0] && res.items[0].id;",
+                  "if (v) { pm.collectionVariables.set('templateId', v); console.log('templateId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11. Templates — create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "templates"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sale live\",\n  \"title\": \"Sale is live\",\n  \"body\": \"Up to 40% off. Tap to shop.\",\n  \"deepLink\": \"collection:sale\"\n}"
+            },
+            "description": "name is unique — it is what the panel shows in its dropdown."
+          }
+        },
+        {
+          "name": "12. Templates — update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/templates/{{templateId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "templates",
+                "{{templateId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Up to 50% off. Tap to shop.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "13. Templates — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/notifications/templates/{{templateId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "notifications",
+                "templates",
+                "{{templateId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Creator applications",
+      "description": "Gate 1: the review queue for creator applications.\n\n⚠️ ADMIN AUTH IS COMPLETELY SEPARATE from customer auth. Different login,\ndifferent signing secret, different token variable ({{adminToken}}).\nA customer token returns 401 here, and an admin token returns 401 on the\ncustomer endpoints — the two strategies are named differently on purpose,\nso mixing them fails loudly instead of quietly passing.\n\nRun `1. Admin login` first.",
+      "item": [
+        {
+          "name": "1. Admin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "// Kept in its own variable so it can never be confused with the",
+                  "// customer token in {{accessToken}}.",
+                  "if (res.accessToken) {",
+                  "  pm.collectionVariables.set('adminToken', res.accessToken);",
+                  "  console.log('Admin token saved, expires in', res.expiresIn, 'seconds');",
+                  "}",
+                  "",
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "There is exactly one admin, configured through environment variables —\nno admin table, no signup, no roles, no \"forgot password\".\n\n────────────────────────────────\nBODY\n────────────────────────────────\nemail      must match ADMIN_EMAIL\npassword   checked against ADMIN_PASSWORD_HASH (argon2id), or\n           ADMIN_PASSWORD in local development only\n\nCreate a hash with:  npm run admin:hash -- \"your-password\"\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\naccessToken   ← JWT signed with JWT_ADMIN_SECRET — a DIFFERENT secret\n                from the customer one, so a customer token can never\n                validate here even if a guard were wired wrongly\ntokenType     ← always \"Bearer\"\nexpiresIn     ← JWT_ADMIN_TTL, default 28800 (8 hours)\nadmin.email   ← the configured ADMIN_EMAIL\n\n📌 There is no refresh token. When the 8 hours are up, log in again.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n401 — \"Email or password is incorrect\" for BOTH wrong email and wrong\n      password, and both are always checked in full so the response\n      time cannot reveal which one was right\n429 — too many attempts from this IP (ADMIN_MAX_LOGIN_ATTEMPTS,\n      locked for ADMIN_LOGIN_LOCK_SECONDS)\n503 — ADMIN_EMAIL is empty, so the whole panel is switched off"
+          }
+        },
+        {
+          "name": "2. Pending count (sidebar badge)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencer-applications/pending-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencer-applications",
+                "pending-count"
+              ]
+            },
+            "description": "One number for the sidebar badge, without fetching the list.\n\n────────────────────────────────\nRESPONSE\n────────────────────────────────\npending   ← COUNT of applications with status PENDING\n\n📌 This route is declared BEFORE `/:id` in the controller. The other\nway round, \"pending-count\" would be parsed as a UUID and 400."
+          }
+        },
+        {
+          "name": "3. Review queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "",
+                  "// Grab the first pending application so approve/reject below work.",
+                  "const first = (res.items || [])[0];",
+                  "if (first) pm.collectionVariables.set('applicationId', first.id);",
+                  "",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('PAN is masked, never full', () => {",
+                  "  for (const a of res.items || []) {",
+                  "    pm.expect(a.panMasked).to.match(/^[A-Z]{3}\\*{4}[0-9A-Z]{3}$/);",
+                  "    pm.expect(a).to.not.have.property('panNumber');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencer-applications?status=PENDING&sort=newest&page=1&limit=25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencer-applications"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING",
+                  "description": "PENDING | APPROVED | REJECTED. Omit for all."
+                },
+                {
+                  "key": "sort",
+                  "value": "newest",
+                  "description": "newest | oldest | followers"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25",
+                  "description": "1-100"
+                },
+                {
+                  "key": "search",
+                  "value": "priya",
+                  "description": "Handle, name, phone or email",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "The queue an admin works through. Offset pagination, not cursors —\nthe panel wants \"Page 4 of 37\", and this data is in our own Postgres.\n\n────────────────────────────────\nQUERY PARAMETERS\n────────────────────────────────\nstatus   PENDING | APPROVED | REJECTED. Omit to get everything.\n         The panel should send PENDING by default so opening the screen\n         shows only outstanding work.\nsort     newest | oldest | followers (default newest)\nsearch   matches handle, first name, last name, phone or email\npage     from 1 (default 1)\nlimit    1-100 (default 25)\n\n────────────────────────────────\nRESPONSE — where each key comes from\n────────────────────────────────\n\nitems[].id               ← InfluencerApplication.id\nitems[].status           ← PENDING | APPROVED | REJECTED\nitems[].socialHandle     ← normalised handle, no leading @\nitems[].socialPlatform   ← instagram | youtube | facebook\nitems[].followerCount    ← ⚠️ self-reported, never verified\nitems[].profileUrl       ← BUILT from platform + handle, ready to open.\n                           This is the point of the screen: the admin\n                           clicks through and looks at the real account.\nitems[].panMasked        ← Application.panNumber as ABC****34F.\n                           ⚠️ The full PAN is NEVER sent to the panel.\n                           An admin screen sits open in an office where\n                           anyone can read it. The full value is pulled\n                           straight from the database at payout time.\nitems[].customerId       ← our Customer.id\nitems[].customerName     ← firstName + lastName, or null\nitems[].customerPhone    ← Customer.primaryPhone (verified)\nitems[].customerEmail    ← primaryEmail. Null when the creator has only\n                           ever verified a phone number.\nitems[].rejectionReason  ← previous rejection text, if any\nitems[].submittedAt      ← createdAt\nitems[].reviewedAt       ← when a decision was made\nitems[].reviewedBy       ← the admin email that decided\nitems[].canReapplyAt     ← reviewedAt + 30 days, rejections only\n\npage / limit / total / totalPages   ← standard admin pagination"
+          }
+        },
+        {
+          "name": "4. Application detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencer-applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencer-applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "One application in full. Same shape as a row from `3. Review queue` —\nevery key is documented there.\n\n{{applicationId}} is filled in automatically by `3. Review queue`, or by\n`Creator program / 1. Apply`.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — :id is not a UUID\n401 — missing or expired admin token\n404 — no such application"
+          }
+        },
+        {
+          "name": "5. Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencer-applications/{{applicationId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencer-applications",
+                "{{applicationId}}",
+                "approve"
+              ]
+            },
+            "description": "Gate 1. After this call the customer's app opens its Creator tab.\nNo body — the acting admin comes from the token.\n\n────────────────────────────────\nWHAT HAPPENS\n────────────────────────────────\nIn ONE transaction:\n  1. the application becomes APPROVED, with reviewedBy and reviewedAt\n  2. an Influencer row is created against that customer\n\nBoth together, deliberately. Split them and a failure in between leaves\nan application marked APPROVED while the customer has no creator access —\nthe most confusing support ticket this feature could produce.\n\n────────────────────────────────\nRESPONSE\n────────────────────────────────\nThe updated application, same shape as `3. Review queue`.\nstatus is now APPROVED and reviewedBy carries the admin email.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n404 — no such application\n409 — already approved or rejected. Two admins (or two browser tabs)\n      acting on the same row: the second one is told plainly rather\n      than silently overwriting the first.\n409 — that customer is already a creator"
+          }
+        },
+        {
+          "name": "6. Reject",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Your Instagram account is private, so we could not review your content. Please make it public and apply again.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencer-applications/{{applicationId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencer-applications",
+                "{{applicationId}}",
+                "reject"
+              ]
+            },
+            "description": "Gate 1, the other way.\n\n────────────────────────────────\nBODY\n────────────────────────────────\nreason   REQUIRED, 10-500 characters.\n         ⚠️ This text is shown to the applicant VERBATIM, which is why\n         a minimum length is enforced — \"no\" cannot be submitted.\n         Someone put effort into applying and deserves to know what to\n         fix.\n\n────────────────────────────────\nWHAT HAPPENS\n────────────────────────────────\nThe application becomes REJECTED, and the applicant cannot apply again\nfor 30 days. Their app shows the reason and the canReapplyAt date.\n\nWithout that cooling-off period the same person reapplies every morning\nand the queue fills with names an admin has already judged.\n\n────────────────────────────────\nRESPONSE\n────────────────────────────────\nThe updated application, with status REJECTED, rejectionReason set to\nyour text, and canReapplyAt 30 days out.\n\n────────────────────────────────\nERRORS\n────────────────────────────────\n400 — reason shorter than 10 characters\n404 — no such application\n409 — already approved or rejected"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Creators",
+      "description": "Creators who are already approved. The review queue for NEW\napplications is in \"Admin — Creator applications\".",
+      "item": [
+        {
+          "name": "1. List creators",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencers?status=ACTIVE&search=&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencers"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACTIVE"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "status   ACTIVE | SUSPENDED\nsearch   handle, name or phone\n\nprofileUrl  ← built from platform + handle, ready to click through"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const v = res.items && res.items[0] && res.items[0].id;",
+                  "if (v) { pm.collectionVariables.set('influencerId', v); console.log('influencerId saved:', v); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Suspend",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencers/{{influencerId}}/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencers",
+                "{{influencerId}}",
+                "suspend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Posted content that misrepresents the product\"\n}"
+            },
+            "description": "Old reels drop out of the feed and no new earning accrues.\n\n⚠️ THE WALLET BALANCE STAYS. That is money already earned, not a penalty.\n\nreason is REQUIRED, minimum 10 characters — the same rule as rejection.\nA month later nothing else answers \"why was this person suspended?\""
+          }
+        },
+        {
+          "name": "3. Reinstate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/influencers/{{influencerId}}/unsuspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "influencers",
+                "{{influencerId}}",
+                "unsuspend"
+              ]
+            },
+            "description": "Back to ACTIVE, and the suspension reason is cleared."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Audit log",
+      "description": "There is one admin, so \"who did it?\" is a small question.\n\"WHEN, and WHAT changed?\" is the big one.\n\nA customer asks \"why was I blocked?\" or \"where did my wishlist go?\" — this is\nthe only place that answers.\n\nThe actor and IP are filled in automatically by AdminContextInterceptor\n(AsyncLocalStorage), so no service has to thread them through its arguments.\nThe alternative was an `actor` parameter on every method, and then whoever\nwrites the next method forgets it and the audit entry quietly disappears.\n\n⚠️ AuditLog has NO foreign keys, on purpose: the history of a deleted or\nmerged record has to survive the record itself.",
+      "item": [
+        {
+          "name": "1. List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-logs?entityType=&entityId=&action=&since=&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "entityType",
+                  "value": ""
+                },
+                {
+                  "key": "entityId",
+                  "value": ""
+                },
+                {
+                  "key": "action",
+                  "value": ""
+                },
+                {
+                  "key": "since",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "entityType  customer | banner | homeSection | page | faq | coupon |\n            notification | notificationTemplate | influencer |\n            influencerApplication | system\nentityId    one record's full history\naction      exact match, e.g. \"customer.block\"\nsince       ISO 8601\n\nbefore / after hold only the fields that changed — copying whole rows would\nleave permanent duplicates of old phone numbers and emails lying around."
+          }
+        },
+        {
+          "name": "2. Known actions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-logs/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "audit-logs",
+                "actions"
+              ]
+            },
+            "description": "Distinct actions that have actually been recorded — for the filter dropdown."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — System",
+      "description": "Ops screens. The public /health is deliberately thinner — it is unauthenticated, so it should not describe our internals.",
+      "item": [
+        {
+          "name": "1. Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/system/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "system",
+                "status"
+              ]
+            },
+            "description": "services            ← Postgres and Redis are pinged; Shopify is only checked\n                      for configuration. Pinging Shopify on every refresh\n                      would drain its rate-limit budget.\nshopify             ← store domain, API version, PRODUCT_SOURCE, whether the\n                      Storefront token is set\nbacklog             ← ⚠️ THE NUMBERS TO WATCH. If any of these keep climbing,\n                      something is stuck:\n                        addressesPendingShopifySync\n                        expiredOtpRows\n                        expiredSessionRows"
+          }
+        },
+        {
+          "name": "2. Pending address syncs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/system/address-sync?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "system",
+                "address-sync"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Addresses that never reached Shopify.\n\nlikelyReason  ← computed, so nobody has to guess:\n                - the country code is missing (it can never be pushed)\n                - the customer has no Shopify record yet\n                - Shopify was unreachable when it was saved"
+          }
+        },
+        {
+          "name": "3. Flush cache",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/system/cache/flush",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "system",
+                "cache",
+                "flush"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"products\"\n}"
+            },
+            "description": "For \"I changed the price in Shopify and the app still shows the old one\".\n\nscope   products | collections | orders | all\n\nPhase 2 webhooks will do this automatically; until then this is the button."
           }
         }
       ]
